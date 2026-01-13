@@ -7,9 +7,10 @@
 	"author": "zhuwenq <zhuwenqa@outlook.com>",
 	"authorUrl": "https://github.com/Leonezz",
 	"fundingUrl": {
-        "Buy Me a Coffee": "https://buymeacoffee.com/zhuwenqa",
-        "Patreon": "https://patreon.com/zhuwenq",
+		"Buy Me a Coffee": "https://buymeacoffee.com/zhuwenqa",
+		"ko-fi": "https://ko-fi.com/zhuwenqa",
+		"Patreon": "https://patreon.com/zhuwenq",
 		"Paypal": "https://www.paypal.com/paypalme/zhuwenq"
-    },
+	},
 	"isDesktopOnly": false
 }

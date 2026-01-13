@@ -4,17 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "b0d65e1853c92838",
+        "id": "e89731634a378d9a",
         "type": "tabs",
         "children": [
           {
-            "id": "642224daa0cc624e",
+            "id": "c9e602196251dd4a",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "Untitled.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "New tab"
+              "title": "Untitled"
             }
           }
         ]
@@ -49,7 +53,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "",
+                "query": "tag:#tag",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -168,13 +172,23 @@
               "icon": "calendar-clock",
               "title": "Tasks Timeline"
             }
+          },
+          {
+            "id": "1b3a18d93e100c66",
+            "type": "leaf",
+            "state": {
+              "type": "tasks_timeline_view",
+              "state": {},
+              "icon": "calendar-clock",
+              "title": "Tasks Timeline"
+            }
           }
         ],
         "currentTab": 5
       }
     ],
     "direction": "horizontal",
-    "width": 713.5
+    "width": 697.5
   },
   "left-ribbon": {
     "hiddenItems": {
@@ -189,5 +203,7 @@
     }
   },
   "active": "52c8769b3cfdb99a",
-  "lastOpenFiles": []
+  "lastOpenFiles": [
+    "Untitled.md"
+  ]
 }

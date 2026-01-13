@@ -14,7 +14,9 @@
 	"keywords": [],
 	"devDependencies": {
 		"@eslint/js": "9.30.1",
+		"@types/luxon": "^3.7.1",
 		"@types/node": "^16.11.6",
+		"@types/parsimmon": "^1.10.9",
 		"@types/react": "^19.2.7",
 		"@types/react-dom": "^19.2.3",
 		"builtin-modules": "^5.0.0",
@@ -28,8 +30,12 @@
 		"vite": "^7.2.4"
 	},
 	"dependencies": {
+		"ahooks": "^3.9.6",
 		"@tasks-timeline/components": "github:Leonezz/tasks-timeline-components",
+		"emoji-regex": "^10.6.0",
+		"luxon": "^3.7.2",
 		"obsidian": "latest",
+		"parsimmon": "^1.18.1",
 		"react": "^19.2.3",
 		"react-dom": "^19.2.3"
 	},

@@ -1,13 +1,15 @@
 import { IconName, ItemView, WorkspaceLeaf } from "obsidian";
 import { createRoot, Root as ReactRoot } from "react-dom/client";
-import { TasksTimelineApp } from "@tasks-timeline/components";
 import React from "react";
 import "@tasks-timeline/components/index.css";
+import TasksTimelineObsidianPlugin from "main";
+import { ObsidianAdaptor } from "./obsidianAdapter";
 
 export const VIEW_TYPE = "tasks-timeline-obsidian";
 
 export class TasksTimelineObsidianView extends ItemView {
 	private root: ReactRoot | undefined;
+	private plugin: TasksTimelineObsidianPlugin;
 	getViewType(): string {
 		return VIEW_TYPE;
 	}
@@ -20,8 +22,9 @@ export class TasksTimelineObsidianView extends ItemView {
 		return "calendar-clock";
 	}
 
-	constructor(leaf: WorkspaceLeaf) {
+	constructor(leaf: WorkspaceLeaf, plugin: TasksTimelineObsidianPlugin) {
 		super(leaf);
+		this.plugin = plugin;
 	}
 
 	protected async onOpen() {
@@ -31,7 +34,7 @@ export class TasksTimelineObsidianView extends ItemView {
 		this.root = createRoot(container);
 		this.root.render(
 			<React.StrictMode>
-				<TasksTimelineApp />
+				<ObsidianAdaptor plugin={this.plugin} />
 			</React.StrictMode>
 		);
 		return;

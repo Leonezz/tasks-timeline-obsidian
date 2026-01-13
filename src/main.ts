@@ -1,15 +1,18 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin } from "obsidian";
 import {
 	DEFAULT_SETTINGS,
-	MyPluginSettings as TasksTimelineObsidianPluginSettings,
+	TasksTimelinePluginSettings as TasksTimelineObsidianPluginSettings,
 	SampleSettingTab,
 } from "./settings";
 import { TasksTimelineObsidianView, VIEW_TYPE } from "./view";
+import { Events, TypedBus } from "./eventbus";
 
 // Remember to rename these classes and interfaces!
 
 export default class TasksTimelineObsidianPlugin extends Plugin {
 	settings: TasksTimelineObsidianPluginSettings;
+	themeObserver: MutationObserver;
+	bus = new TypedBus<Events>();
 
 	async onload() {
 		await this.loadSettings();
@@ -77,14 +80,32 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 		);
 
 		this.registerView(VIEW_TYPE, (leaf) => {
-			const view = new TasksTimelineObsidianView(leaf);
+			const view = new TasksTimelineObsidianView(leaf, this);
 			return view;
 		});
 		await this.activateView();
+		this.themeObserver = new MutationObserver((mutations) => {
+			mutations.forEach((mutation) => {
+				if (mutation.attributeName === "class") {
+					const isDarkMode =
+						document.body.classList.contains("theme-dark");
+					console.log("Theme changed. Dark mode active:", isDarkMode);
+					this.settings.systemInDarkMode = isDarkMode;
+					this.bus.emit("system:themeChange", {
+						isDarkMode: isDarkMode,
+					});
+				}
+			});
+		});
+		this.themeObserver.observe(document.body, {
+			attributes: true,
+			attributeFilter: ["class"],
+		});
 	}
 
 	onunload() {
 		this.app.workspace.detachLeavesOfType(VIEW_TYPE);
+		this.themeObserver.disconnect();
 	}
 
 	async loadSettings() {
@@ -100,7 +121,7 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 	}
 
 	async activateView() {
-        const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE);
+		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE);
 		if (leaves.length > 0) {
 			this.app.workspace.revealLeaf(leaves[0]!);
 			return;
@@ -115,7 +136,7 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 		} catch (e) {
 			console.log("activate view failed with err: ", e);
 		}
-    }
+	}
 }
 
 class SampleModal extends Modal {
