@@ -127,7 +127,7 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 	const handleTaskAdded = async (task: Task) => {
 		// For now, we don't support adding tasks from the UI
 		// This would require creating a new markdown task in a file
-		console.log("Task added (not implemented):", task);
+		console.debug("Task added (not implemented):", task);
 	};
 
 	const handleTaskUpdated = async (task: Task, previous: Task) => {

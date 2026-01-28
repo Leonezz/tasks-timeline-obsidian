@@ -15,6 +15,7 @@ export class TasksTimelineObsidianView extends ItemView {
 	}
 
 	getDisplayText(): string {
+		// eslint-disable-next-line obsidianmd/ui/sentence-case -- Plugin name
 		return "Tasks Timeline";
 	}
 
