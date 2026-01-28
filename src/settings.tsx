@@ -80,6 +80,13 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
+	hide(): void {
+		if (this.root) {
+			this.root.unmount();
+			this.root = undefined;
+		}
+	}
+
 	display(): void {
 		const { containerEl } = this;
 		const container = containerEl;

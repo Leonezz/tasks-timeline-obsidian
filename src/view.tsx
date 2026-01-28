@@ -29,7 +29,11 @@ export class TasksTimelineObsidianView extends ItemView {
 
 	protected async onOpen() {
 		const { containerEl } = this;
-		const container = containerEl.children[1]!;
+		const container = containerEl.children[1];
+		if (!container) {
+			console.error("Tasks Timeline: Container element not found");
+			return;
+		}
 		container.empty();
 		this.root = createRoot(container);
 		this.root.render(
@@ -37,6 +41,12 @@ export class TasksTimelineObsidianView extends ItemView {
 				<ObsidianAdaptor plugin={this.plugin} />
 			</React.StrictMode>
 		);
-		return;
+	}
+
+	protected async onClose() {
+		if (this.root) {
+			this.root.unmount();
+			this.root = undefined;
+		}
 	}
 }
