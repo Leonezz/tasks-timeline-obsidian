@@ -80,6 +80,13 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
+	hide(): void {
+		if (this.root) {
+			this.root.unmount();
+			this.root = undefined;
+		}
+	}
+
 	display(): void {
 		const { containerEl } = this;
 		const container = containerEl;
@@ -89,7 +96,10 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 			isOpen: true,
 			onClose: () => {},
 			settings: this.plugin.settings.appSetting,
-			onUpdateSettings: (s: AppSettings) => {},
+			onUpdateSettings: (s: AppSettings) => {
+				this.plugin.settings.appSetting = s;
+				void this.plugin.saveSettings();
+			},
 			filters: {
 				tags: [],
 				categories: [],

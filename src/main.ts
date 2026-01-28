@@ -33,7 +33,7 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 				if (mutation.attributeName === "class") {
 					const isDarkMode =
 						document.body.classList.contains("theme-dark");
-					console.log("Theme changed. Dark mode active:", isDarkMode);
+					console.debug("Theme changed. Dark mode active:", isDarkMode);
 					this.settings.systemInDarkMode = isDarkMode;
 					this.bus.emit("system:themeChange", {
 						isDarkMode: isDarkMode,
