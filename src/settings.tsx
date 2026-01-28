@@ -89,7 +89,10 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 			isOpen: true,
 			onClose: () => {},
 			settings: this.plugin.settings.appSetting,
-			onUpdateSettings: (s: AppSettings) => {},
+			onUpdateSettings: (s: AppSettings) => {
+				this.plugin.settings.appSetting = s;
+				void this.plugin.saveSettings();
+			},
 			filters: {
 				tags: [],
 				categories: [],

@@ -359,8 +359,7 @@ export const parseDataViewFormatItem = (item: Task): Task => {
 		}
 		switch (normalizedKey) {
 			case "due":
-				console.log("got due", fieldDate.toISODate());
-				item.dueAt = fieldDate.toISOTime();
+				item.dueAt = fieldDate.toISODate();
 				break;
 			case "scheduled":
 				item.extra["scheduledAt"] = fieldDate.toISODate();
@@ -368,15 +367,12 @@ export const parseDataViewFormatItem = (item: Task): Task => {
 			case "complete":
 			case "completion":
 			case "done":
-				console.log("got done", fieldDate.toISODate());
 				item.completedAt = fieldDate.toISODate();
 				break;
 			case "created":
-				console.log("got create", fieldDate.toISODate());
 				item.createdAt = fieldDate.toISODate();
 				break;
 			case "start":
-				console.log("got start", fieldDate.toISODate());
 				item.startAt = fieldDate.toISODate();
 				break;
 			default:

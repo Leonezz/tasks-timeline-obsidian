@@ -127,21 +127,32 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 	const handleTaskAdded = async (task: Task) => {
 		// For now, we don't support adding tasks from the UI
 		// This would require creating a new markdown task in a file
-		console.log("Task added (not implemented):", task);
+		console.debug("Task added (not implemented):", task);
+		new Notice("Adding tasks from the UI is not yet supported");
 	};
 
 	const handleTaskUpdated = async (task: Task, previous: Task) => {
-		await stableTasksRepo.current.updateTask(task);
-		// Update local state optimistically
-		setTasks((prev) =>
-			prev.map((t) => (t.id === task.id ? task : t))
-		);
+		try {
+			await stableTasksRepo.current.updateTask(task);
+			// Update local state only after successful save
+			setTasks((prev) =>
+				prev.map((t) => (t.id === task.id ? task : t))
+			);
+		} catch (error) {
+			console.error("Failed to update task:", error);
+			new Notice("Failed to update task. Changes not saved.");
+		}
 	};
 
 	const handleTaskDeleted = async (taskId: string, previous: Task) => {
-		await stableTasksRepo.current.deleteTask(taskId);
-		// Update local state optimistically
-		setTasks((prev) => prev.filter((t) => t.id !== taskId));
+		try {
+			await stableTasksRepo.current.deleteTask(taskId);
+			// Update local state only after successful delete
+			setTasks((prev) => prev.filter((t) => t.id !== taskId));
+		} catch (error) {
+			console.error("Failed to delete task:", error);
+			new Notice("Failed to delete task.");
+		}
 	};
 
 	return (
