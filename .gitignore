@@ -1,5 +1,5 @@
 # vscode
-.vscode 
+.vscode
 
 # Intellij
 *.iml
@@ -8,8 +8,8 @@
 # npm
 node_modules
 
-# Don't include the compiled main.js file in the repo.
-# They should be uploaded to GitHub releases instead.
+# Build output
+dist/
 main.js
 
 # Exclude sourcemaps
@@ -20,3 +20,15 @@ data.json
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
+
+# AI agent guidance files
+AGENTS.md
+CLAUDE.md
+.prd/
+.review/
+.claude/
+
+# Example vault generated content
+ExampleVault/.obsidian/workspace.json
+ExampleVault/.obsidian/app.json
+ExampleVault/.obsidian/plugins/
