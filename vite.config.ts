@@ -1,6 +1,10 @@
 import { UserConfig, defineConfig } from "vite";
 import path from "path";
 import builtins from "builtin-modules";
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default defineConfig(async ({ mode }) => {
 	const { resolve } = path;

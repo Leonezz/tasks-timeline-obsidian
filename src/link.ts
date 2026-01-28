@@ -127,7 +127,7 @@ export class Link {
 		});
 	}
 
-	public static fromObject(object: Record<string, any>) {
+	public static fromObject(object: Record<string, unknown>) {
 		return new Link(object);
 	}
 
@@ -152,7 +152,7 @@ export class Link {
 	}
 
 	/** Convert this link to a raw object which is serialization-friendly. */
-	public toObject(): Record<string, any> {
+	public toObject(): Record<string, unknown> {
 		return {
 			path: this.path,
 			type: this.type,

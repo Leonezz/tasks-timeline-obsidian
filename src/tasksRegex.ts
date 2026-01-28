@@ -73,8 +73,8 @@ export class TaskRegularExpressions {
 	public static readonly TasksPluginDateRegex =
 		/[🛫|⏳|📅|✅] *(\d{4}-\d{2}-\d{2})/u;
 
-	// [[a::b]] => a, b
-	public static readonly keyValueRegex = /\[+([^\]]+)::([^\]]+)\]\]/g;
+	// [[a::b]] or [[a:: b]] => a, b (space after :: is optional)
+	public static readonly keyValueRegex = /\[+([^\]]+):: ?([^\]]+)\]\]/g;
 
 	/**
 	 * [a](b) => a, b (a could be empty)

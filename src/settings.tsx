@@ -71,7 +71,7 @@ export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 	systemInDarkMode: false,
 };
 
-export class SampleSettingTab extends PluginSettingTab {
+export class TasksTimelineSettingTab extends PluginSettingTab {
 	plugin: TasksTimelineObsidianPlugin;
 	private root: ReactRoot | undefined;
 

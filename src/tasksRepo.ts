@@ -1,7 +1,3 @@
-import { Task, TaskRepository } from "@tasks-timeline/components";
-import { randomUUID } from "crypto";
-import { getFileTitle, Link } from "./link";
-import TasksTimelineObsidianPlugin from "main";
 import {
 	FrontMatterCache,
 	LinkCache,
@@ -9,6 +5,7 @@ import {
 	Pos,
 	SectionCache,
 	TagCache,
+	TFile,
 } from "obsidian";
 import { getTaskStatusFromMarker } from "./symbols";
 import { TaskRegularExpressions } from "./tasksRegex";
@@ -20,67 +17,204 @@ import {
 	remainderParser,
 	tagsParser,
 } from "./parsers";
+import { taskToMarkdown } from "./serializers";
+import TasksTimelineObsidianPlugin from "./main";
+import { Link } from "./link";
+import { Task, TaskRepository } from "@tasks-timeline/components";
 
 export class ObsidianTasksRepo implements TaskRepository {
 	name: string = "Obsidian Notes";
 	plugin: TasksTimelineObsidianPlugin;
+	private taskCache = new Map<
+		string,
+		{ file: string; rawText: string; position: string }
+	>();
+	private fileTaskCache = new Map<string, Task[]>();
+
 	constructor(plugin: TasksTimelineObsidianPlugin) {
 		this.plugin = plugin;
 	}
-	loadTasks(): Promise<Task[]> {
+
+	invalidateFile(path: string) {
+		this.fileTaskCache.delete(path);
+	}
+
+	async loadTasks(): Promise<Task[]> {
+		// We rebuild the taskCache from fileTaskCache to ensure ID consistency.
+		this.taskCache.clear();
+
 		const files = this.plugin.app.vault.getMarkdownFiles();
-		const allItems = files.flatMap((file, index, all) => {
+		const allItems = files.map(async (file) => {
+			if (this.fileTaskCache.has(file.path)) {
+				return this.fileTaskCache.get(file.path)!;
+			}
+
 			const link = Link.file(file.path);
-			const items = this.plugin.app.vault
-				.cachedRead(file)
-				.then((content) => {
-					const cache =
-						this.plugin.app.metadataCache.getFileCache(file);
-					return (
-						cache?.listItems
-							?.map(
-								this.fromItemCache(
-									link,
-									file.path,
-									content,
-									cache.sections,
-									cache.links,
-									cache.frontmatter,
-									cache.tags
-								)
+			try {
+				const content = await this.plugin.app.vault.cachedRead(file);
+				const cache = this.plugin.app.metadataCache.getFileCache(file);
+				const tasks =
+					cache?.listItems
+						?.map(
+							this.fromItemCache(
+								link,
+								file.path,
+								content,
+								cache.sections,
+								cache.links,
+								cache.frontmatter,
+								cache.tags
 							)
-							.filter((item) => !!item) || ([] as Task[])
-					);
-				})
-				.catch((reason) => {
-					console.error("read file from obsidian failed: ", reason);
-					return [] as Task[];
-				});
-			return items;
-		});
-		return Promise.all(allItems)
-			.then((items) => items.flat())
-			.then((items) => {
-				return items
+						)
+						.filter((item): item is Task => !!item) || [];
+				
+				// Process tasks
+				const processedTasks = tasks
 					.map(parseTasksFormatItem)
 					.map(parseDataViewFormatItem)
 					.map(dailyNoteTaskParser())
 					.map(remainderParser)
 					.map(tagsParser)
-					.map(markerBasedStatusParser);
-			});
+					.map(markerBasedStatusParser)
+					// Ensure tags is always an array (defensive)
+					.map((task) => ({
+						...task,
+						tags: task.tags || [],
+					}));
+
+				this.fileTaskCache.set(file.path, processedTasks);
+				return processedTasks;
+			} catch (reason) {
+				console.error(`Read file ${file.path} failed:`, reason);
+				return [] as Task[];
+			}
+		});
+
+		const results = await Promise.all(allItems);
+		const flattenedTasks = results.flat();
+
+		// Populate ID cache
+		flattenedTasks.forEach((task) => {
+			if (task.extra?.file && task.extra?.rawText) {
+				this.taskCache.set(task.id, {
+					file: task.extra.file,
+					rawText: task.extra.rawText,
+					position: task.extra.position || "",
+				});
+			}
+		});
+
+		return flattenedTasks;
 	}
+
 	saveTasks(tasks: Task[]): Promise<void> {
-		console.log("save tasks: ", tasks);
 		return Promise.resolve();
 	}
-	updateTask(task: Task): Promise<void> {
-		console.log("update task: ", task);
-		return Promise.resolve();
+
+	async updateTask(task: Task): Promise<void> {
+		if (!task.extra?.file) return;
+		const file = this.plugin.app.vault.getAbstractFileByPath(
+			task.extra.file
+		);
+		if (!(file instanceof TFile)) return;
+
+		await this.plugin.app.vault.process(file, (content) => {
+			const lines = content.split("\n");
+			let lineIndex = -1;
+			const storedRawText = task.extra?.rawText;
+
+			// 1. Try to find by position
+			if (task.extra?.position) {
+				try {
+					const pos = JSON.parse(task.extra.position) as Pos;
+					// Verify if the line at this position matches the raw text we know
+					if (
+						lines[pos.start.line] !== undefined &&
+						lines[pos.start.line] === storedRawText
+					) {
+						lineIndex = pos.start.line;
+					}
+				} catch (e) {
+					console.warn("Failed to parse task position", e);
+				}
+			}
+
+			// 2. Fallback: Find by exact content match
+			if (lineIndex === -1 && storedRawText) {
+				lineIndex = lines.indexOf(storedRawText);
+			}
+
+			if (lineIndex === -1) {
+				console.warn(
+					"Could not find original task line to update",
+					task
+				);
+				return content;
+			}
+
+			// 3. Update the line
+			const originalLine = lines[lineIndex];
+			if (originalLine) {
+				const newLine = taskToMarkdown(task, originalLine);
+				lines[lineIndex] = newLine;
+			} else {
+				console.warn("Original line undefined at index", lineIndex);
+			}
+
+			return lines.join("\n");
+		});
 	}
-	deleteTask(id: string): Promise<void> {
-		console.log("delete tasks: ", id);
-		return Promise.resolve();
+
+	async deleteTask(id: string): Promise<void> {
+		const cached = this.taskCache.get(id);
+		if (!cached) {
+			console.warn("Cannot delete task: ID not found in cache", id);
+			return;
+		}
+
+		const file = this.plugin.app.vault.getAbstractFileByPath(cached.file);
+		if (!(file instanceof TFile)) return;
+
+		await this.plugin.app.vault.process(file, (content) => {
+			const lines = content.split("\n");
+			let lineIndex = -1;
+
+			// 1. Try to find by position
+			if (cached.position) {
+				try {
+					const pos = JSON.parse(cached.position) as Pos;
+					if (
+						lines[pos.start.line] !== undefined &&
+						lines[pos.start.line] === cached.rawText
+					) {
+						lineIndex = pos.start.line;
+					}
+				} catch (e) {
+					console.warn("Failed to parse task position", e);
+				}
+			}
+
+			// 2. Fallback: Find by content
+			if (lineIndex === -1) {
+				lineIndex = lines.indexOf(cached.rawText);
+			}
+
+			if (lineIndex === -1) {
+				console.warn(
+					"Could not find task line to delete",
+					cached.rawText
+				);
+				return content;
+			}
+
+			// 3. Delete the line
+			lines.splice(lineIndex, 1);
+
+			// Remove from cache to prevent subsequent operations on stale ID
+			this.taskCache.delete(id);
+
+			return lines.join("\n");
+		});
 	}
 
 	/**
@@ -175,6 +309,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 			);
 		};
 	}
+
 	/**
 	 * This function parse the raw text of a list item and judge if it is a task item.
 	 * If it is a task item, it extract only basic information to construct a TaskDataModel.
@@ -198,7 +333,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 		outLinks: Link[],
 		//children: TaskDataModel[],
 		//annotated: boolean,
-		frontMatter: Record<string, string> | undefined,
+		frontMatter: FrontMatterCache | undefined,
 		tags: string[]
 	): Task | null {
 		// Check the line to see if it is a markdown task.
@@ -214,7 +349,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 		}
 		let description = body;
 		//const indentation = regexMatch[1]; // before - [ ]
-		const listMarker = regexMatch[2]!; // - for - [ ]
+		// const listMarker = regexMatch[2]!; // - for - [ ]
 
 		// Get the status of the task.
 		const statusString = regexMatch[3]!; // x for - [x]
@@ -233,29 +368,31 @@ export class ObsidianTasksRepo implements TaskRepository {
 				.trim();
 		}
 
+		const frontmatterTags: string[] = [];
 		if (frontMatter) {
 			if (frontMatter["tag"] && typeof frontMatter["tag"] === "string") {
-				// add # as prefix if there is not such prefix
-				// But it seems unnecessary to judge cuz in obsidian # prefix is not allowed for the frontmatter tags
 				const frontmatterTagPrefix = frontMatter["tag"].startsWith("#")
 					? ""
 					: "#";
-				tags.push(frontmatterTagPrefix + frontMatter["tag"]);
+				const tag = frontmatterTagPrefix + frontMatter["tag"];
+				tags.push(tag);
+				frontmatterTags.push(tag);
 			}
 			if (
 				frontMatter["tags"] &&
-				typeof frontMatter["tags"] === typeof new Array<string>()
+				Array.isArray(frontMatter["tags"])
 			) {
-				// add # as prefix if there is not such prefix
-				(frontMatter["tags"] as unknown as Array<string>).forEach((t) =>
-					tags.push(t.startsWith("#") ? "" : "#" + t)
-				);
+				(frontMatter["tags"] as string[]).forEach((t) => {
+					const tag = t.startsWith("#") ? t : "#" + t;
+					tags.push(tag);
+					frontmatterTags.push(tag);
+				});
 			}
 		}
 
 		tags = [...new Set(tags)];
 		return {
-			id: randomUUID(),
+			id: crypto.randomUUID(),
 			title: description.trim(),
 			status: getTaskStatusFromMarker(statusString),
 			category: filePath,
@@ -266,6 +403,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 				position: JSON.stringify(position),
 				file: filePath,
 				marker: statusString,
+				frontmatterTags: JSON.stringify(frontmatterTags),
 			},
 		};
 	}

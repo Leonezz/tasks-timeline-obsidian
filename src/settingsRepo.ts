@@ -14,7 +14,10 @@ export class ObsidianSettingRepo implements SettingsRepository {
 				.then(() => {
 					rsv(this.plugin.settings.appSetting);
 				})
-				.catch((e) => rej(e));
+				.catch((e) => {
+					if (e instanceof Error) rej(e);
+					else rej(new Error(String(e)));
+				});
 		});
 	}
 	saveSettings(settings: AppSettings): Promise<void> {

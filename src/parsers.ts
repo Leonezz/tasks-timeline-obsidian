@@ -3,7 +3,6 @@ import { getFileTitle } from "./link";
 import { DateTime } from "luxon";
 import {
 	MdMarkerToTaskStatus,
-	TasksPrioritySymbol,
 	TasksPrioritySymbolToLabel,
 } from "./symbols";
 import { TaskRegularExpressions } from "./tasksRegex";
@@ -28,7 +27,7 @@ const parsePriority = (str: string, exp: RegExp): Priority | null => {
 	if (priorityMatch !== null && priorityMatch[1]) {
 		return (
 			TasksPrioritySymbolToLabel[
-				priorityMatch[1] as TasksPrioritySymbol
+				priorityMatch[1]
 			] || "medium"
 		);
 	}
@@ -73,7 +72,7 @@ const parseAndReplace = <Key extends keyof ParseFieldType>(
 			const newDate = parseDate(str, exp);
 			if (newDate) {
 				return [
-					newDate as ParseFieldType[Key],
+					newDate as unknown as ParseFieldType[Key],
 					str.replace(exp, "").trim(),
 					true,
 				];
@@ -84,7 +83,7 @@ const parseAndReplace = <Key extends keyof ParseFieldType>(
 			const newPriority = parsePriority(str, exp);
 			if (newPriority) {
 				return [
-					newPriority as ParseFieldType[Key],
+					newPriority as unknown as ParseFieldType[Key],
 					str.replace(exp, "").trim(),
 					true,
 				];
@@ -99,7 +98,7 @@ const parseAndReplace = <Key extends keyof ParseFieldType>(
 						? [newTag, original as string].join(" ")
 						: newTag;
 				return [
-					result as ParseFieldType[Key],
+					result as unknown as ParseFieldType[Key],
 					str.replace(exp, "").trim(),
 					true,
 				];
@@ -110,7 +109,7 @@ const parseAndReplace = <Key extends keyof ParseFieldType>(
 			const newPattern = parseStringPattern(str, exp);
 			if (newPattern) {
 				return [
-					newPattern as ParseFieldType[Key],
+					newPattern as unknown as ParseFieldType[Key],
 					str.replace(exp, "").trim(),
 					true,
 				];
@@ -428,8 +427,8 @@ export const tagsParser = (item: Task): Task => {
 		item.title = item.title.replace(m, "").trim();
 		const tag = m.trim();
 		item.tags.push({
-			id: m,
-			name: m,
+			id: tag,
+			name: tag,
 		});
 	}
 	return item;
