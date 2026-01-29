@@ -21,6 +21,7 @@
 		"@types/react-dom": "^19.2.3",
 		"builtin-modules": "^5.0.0",
 		"esbuild": "0.25.5",
+		"eslint": "^9.39.2",
 		"eslint-plugin-obsidianmd": "0.1.9",
 		"globals": "14.0.0",
 		"jiti": "2.6.1",
@@ -30,8 +31,8 @@
 		"vite": "^7.2.4"
 	},
 	"dependencies": {
-		"ahooks": "^3.9.6",
 		"@tasks-timeline/components": "latest",
+		"ahooks": "^3.9.6",
 		"emoji-regex": "^10.6.0",
 		"luxon": "^3.7.2",
 		"obsidian": "latest",
