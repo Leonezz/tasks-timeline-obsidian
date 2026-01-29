@@ -411,8 +411,10 @@ export class ObsidianTasksRepo implements TaskRepository {
 		}
 
 		tags = [...new Set(tags)];
+		// Create stable ID based on file path and position
+		const stableId = `${filePath}:${position.start.line}:${position.start.col}`;
 		return {
-			id: crypto.randomUUID(),
+			id: stableId,
 			title: description.trim(),
 			status: getTaskStatusFromMarker(statusString),
 			category: filePath,
