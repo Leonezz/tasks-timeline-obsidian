@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@tasks-timeline/components':
-        specifier: ^0.0.6
-        version: 0.0.6(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        specifier: latest
+        version: 0.0.9(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       ahooks:
         specifier: ^3.9.6
         version: 3.9.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -1018,8 +1018,8 @@ packages:
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
 
-  '@tasks-timeline/components@0.0.6':
-    resolution: {integrity: sha512-qZMOgNckwIZmb9faCjAgvi06deJ3OMI4Lhuf2Hq0o7lH6f587jePRBOUY5HPqKH9KeAqwi1oWVK7lIFmVJo6uQ==}
+  '@tasks-timeline/components@0.0.9':
+    resolution: {integrity: sha512-afJnL0c9zOJLAj8LaBYsu/NRrFBXCBZnPi3GuMVEQKPdbAkaDFm24ylwM/lQLRBDpX3jysxOCfCrmeMUFGbaxA==}
     peerDependencies:
       react: ^19.2.3
       react-dom: ^19.2.3
@@ -3369,7 +3369,7 @@ snapshots:
 
   '@rtsao/scc@1.1.0': {}
 
-  '@tasks-timeline/components@0.0.6(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@tasks-timeline/components@0.0.9(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
       '@google/genai': 1.38.0
       '@radix-ui/react-collapsible': 1.1.12(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
