@@ -121,32 +121,48 @@ export class ObsidianTasksRepo implements TaskRepository {
 	}
 
 	async updateTask(task: Task): Promise<void> {
-		if (!task.extra?.file) {
+		// Get cached data - the UI component might not preserve extra fields
+		const cached = this.taskCache.get(task.id);
+		const filePath = task.extra?.file || cached?.file;
+
+		if (!filePath) {
 			throw new Error("Cannot update task: file information missing");
 		}
-		const file = this.plugin.app.vault.getAbstractFileByPath(
-			task.extra.file
-		);
+		const file = this.plugin.app.vault.getAbstractFileByPath(filePath);
 		if (!(file instanceof TFile)) {
-			throw new Error(`Cannot update task: file not found: ${task.extra.file}`);
+			throw new Error(`Cannot update task: file not found: ${filePath}`);
 		}
 
 		let updateSucceeded = false;
 		await this.plugin.app.vault.process(file, (content) => {
 			const lines = content.split("\n");
 			let lineIndex = -1;
-			const storedRawText = task.extra?.rawText;
+			// Prefer cached rawText over task.extra.rawText (UI may not preserve it)
+			const storedRawText = cached?.rawText || task.extra?.rawText;
+			const storedPosition = cached?.position || task.extra?.position;
 
-			// 1. Try to find by position
-			if (task.extra?.position) {
+			// 1. Try to find by position with exact match
+			if (storedPosition) {
 				try {
-					const pos = JSON.parse(task.extra.position) as Pos;
-					// Verify if the line at this position matches the raw text we know
-					if (
-						lines[pos.start.line] !== undefined &&
-						lines[pos.start.line] === storedRawText
-					) {
-						lineIndex = pos.start.line;
+					const pos = JSON.parse(storedPosition) as Pos;
+					const lineAtPos = lines[pos.start.line];
+					if (lineAtPos !== undefined) {
+						// Exact match
+						if (lineAtPos === storedRawText) {
+							lineIndex = pos.start.line;
+						}
+						// Trimmed match (handles trailing whitespace differences)
+						else if (storedRawText && lineAtPos.trim() === storedRawText.trim()) {
+							lineIndex = pos.start.line;
+						}
+						// Line is still a task at this position (fallback)
+						else if (TaskRegularExpressions.taskRegex.test(lineAtPos)) {
+							lineIndex = pos.start.line;
+							console.debug("Using position fallback for task update", {
+								expected: storedRawText,
+								found: lineAtPos,
+							});
+						}
 					}
 				} catch (e) {
 					console.warn("Failed to parse task position", e);
@@ -156,6 +172,10 @@ export class ObsidianTasksRepo implements TaskRepository {
 			// 2. Fallback: Find by exact content match
 			if (lineIndex === -1 && storedRawText) {
 				lineIndex = lines.indexOf(storedRawText);
+				// Try trimmed match
+				if (lineIndex === -1) {
+					lineIndex = lines.findIndex(l => l.trim() === storedRawText.trim());
+				}
 			}
 
 			if (lineIndex === -1) {

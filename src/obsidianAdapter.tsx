@@ -132,6 +132,19 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 	};
 
 	const handleTaskUpdated = async (task: Task, previous: Task) => {
+		// Skip update if nothing actually changed
+		if (
+			task.title === previous.title &&
+			task.status === previous.status &&
+			task.priority === previous.priority &&
+			task.dueAt === previous.dueAt &&
+			task.completedAt === previous.completedAt &&
+			task.startAt === previous.startAt &&
+			task.createdAt === previous.createdAt
+		) {
+			return;
+		}
+
 		try {
 			await stableTasksRepo.current.updateTask(task);
 			// Update local state only after successful save
