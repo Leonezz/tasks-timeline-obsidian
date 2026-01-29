@@ -7,6 +7,15 @@ import { ObsidianAdaptor } from "./obsidianAdapter";
 
 export const VIEW_TYPE = "tasks-timeline-obsidian";
 
+/**
+ * Helper to safely unmount a React root and return undefined.
+ * Used by both view and settings tab for cleanup.
+ */
+export function unmountReactRoot(root: ReactRoot | undefined): undefined {
+	root?.unmount();
+	return undefined;
+}
+
 interface ErrorBoundaryProps {
 	children: ReactNode;
 }
@@ -95,9 +104,6 @@ export class TasksTimelineObsidianView extends ItemView {
 	}
 
 	protected async onClose() {
-		if (this.root) {
-			this.root.unmount();
-			this.root = undefined;
-		}
+		this.root = unmountReactRoot(this.root);
 	}
 }

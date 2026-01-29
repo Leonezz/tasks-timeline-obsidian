@@ -10,6 +10,7 @@ import {
 	SortField,
 	SortState,
 } from "@tasks-timeline/components";
+import { unmountReactRoot } from "./view";
 
 export interface TasksTimelinePluginSettings {
 	appSetting: AppSettings;
@@ -81,10 +82,7 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 	}
 
 	hide(): void {
-		if (this.root) {
-			this.root.unmount();
-			this.root = undefined;
-		}
+		this.root = unmountReactRoot(this.root);
 	}
 
 	display(): void {
