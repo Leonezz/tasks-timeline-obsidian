@@ -21,7 +21,13 @@ export class TypedBus<E extends Record<string, unknown>> {
 
 	emit<K extends keyof E>(event: K, payload: E[K]) {
 		const call = (set?: Set<(p: E[K]) => void>) =>
-			set?.forEach((fn) => fn(payload));
+			set?.forEach((fn) => {
+				try {
+					fn(payload);
+				} catch (e) {
+					console.error(`Event handler for ${String(event)} threw:`, e);
+				}
+			});
 		console.debug("emit: ", event, ", listeners: ", this.map[event]?.size);
 		call(this.map[event]);
 		// naive wildcard match: prefix + ':*'

@@ -94,13 +94,13 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 
 	// Listen to vault changes
 	useEffect(() => {
-		// Debounced reload function
+		// Debounced reload function (trailing edge to batch rapid changes)
 		const reload = debounce(
 			() => {
 				void loadTasks();
 			},
 			1000,
-			true
+			false
 		);
 
 		const eventRef = plugin.app.vault.on("modify", (file) => {
