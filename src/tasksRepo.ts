@@ -2,6 +2,7 @@ import {
 	FrontMatterCache,
 	LinkCache,
 	ListItemCache,
+	Notice,
 	Pos,
 	SectionCache,
 	TagCache,
@@ -44,6 +45,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 		this.taskCache.clear();
 
 		const files = this.plugin.app.vault.getMarkdownFiles();
+		const failedFiles: string[] = [];
 		const allItems = files.map(async (file) => {
 			if (this.fileTaskCache.has(file.path)) {
 				return this.fileTaskCache.get(file.path)!;
@@ -67,7 +69,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 							)
 						)
 						.filter((item): item is Task => !!item) || [];
-				
+
 				// Process tasks
 				const processedTasks = tasks
 					.map(parseTasksFormatItem)
@@ -86,12 +88,19 @@ export class ObsidianTasksRepo implements TaskRepository {
 				return processedTasks;
 			} catch (reason) {
 				console.error(`Read file ${file.path} failed:`, reason);
+				failedFiles.push(file.path);
 				return [] as Task[];
 			}
 		});
 
 		const results = await Promise.all(allItems);
 		const flattenedTasks = results.flat();
+
+		// Notify user if some files couldn't be read
+		if (failedFiles.length > 0) {
+			new Notice(`Warning: ${failedFiles.length} file(s) could not be read. Some tasks may be missing.`);
+			console.warn("Failed to read files:", failedFiles);
+		}
 
 		// Populate ID cache
 		flattenedTasks.forEach((task) => {
@@ -112,12 +121,17 @@ export class ObsidianTasksRepo implements TaskRepository {
 	}
 
 	async updateTask(task: Task): Promise<void> {
-		if (!task.extra?.file) return;
+		if (!task.extra?.file) {
+			throw new Error("Cannot update task: file information missing");
+		}
 		const file = this.plugin.app.vault.getAbstractFileByPath(
 			task.extra.file
 		);
-		if (!(file instanceof TFile)) return;
+		if (!(file instanceof TFile)) {
+			throw new Error(`Cannot update task: file not found: ${task.extra.file}`);
+		}
 
+		let updateSucceeded = false;
 		await this.plugin.app.vault.process(file, (content) => {
 			const lines = content.split("\n");
 			let lineIndex = -1;
@@ -145,10 +159,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 			}
 
 			if (lineIndex === -1) {
-				console.warn(
-					"Could not find original task line to update",
-					task
-				);
+				console.error("Could not find original task line to update", task);
 				return content;
 			}
 
@@ -157,24 +168,31 @@ export class ObsidianTasksRepo implements TaskRepository {
 			if (originalLine) {
 				const newLine = taskToMarkdown(task, originalLine);
 				lines[lineIndex] = newLine;
+				updateSucceeded = true;
 			} else {
-				console.warn("Original line undefined at index", lineIndex);
+				console.error("Original line undefined at index", lineIndex);
 			}
 
 			return lines.join("\n");
 		});
+
+		if (!updateSucceeded) {
+			throw new Error("Could not find task line to update");
+		}
 	}
 
 	async deleteTask(id: string): Promise<void> {
 		const cached = this.taskCache.get(id);
 		if (!cached) {
-			console.warn("Cannot delete task: ID not found in cache", id);
-			return;
+			throw new Error(`Cannot delete task: ID not found in cache: ${id}`);
 		}
 
 		const file = this.plugin.app.vault.getAbstractFileByPath(cached.file);
-		if (!(file instanceof TFile)) return;
+		if (!(file instanceof TFile)) {
+			throw new Error(`Cannot delete task: file not found: ${cached.file}`);
+		}
 
+		let deleteSucceeded = false;
 		await this.plugin.app.vault.process(file, (content) => {
 			const lines = content.split("\n");
 			let lineIndex = -1;
@@ -200,10 +218,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 			}
 
 			if (lineIndex === -1) {
-				console.warn(
-					"Could not find task line to delete",
-					cached.rawText
-				);
+				console.error("Could not find task line to delete", cached.rawText);
 				return content;
 			}
 
@@ -212,9 +227,14 @@ export class ObsidianTasksRepo implements TaskRepository {
 
 			// Remove from cache to prevent subsequent operations on stale ID
 			this.taskCache.delete(id);
+			deleteSucceeded = true;
 
 			return lines.join("\n");
 		});
+
+		if (!deleteSucceeded) {
+			throw new Error("Could not find task line to delete");
+		}
 	}
 
 	/**
@@ -391,8 +411,10 @@ export class ObsidianTasksRepo implements TaskRepository {
 		}
 
 		tags = [...new Set(tags)];
+		// Create stable ID based on file path and position
+		const stableId = `${filePath}:${position.start.line}:${position.start.col}`;
 		return {
-			id: crypto.randomUUID(),
+			id: stableId,
 			title: description.trim(),
 			status: getTaskStatusFromMarker(statusString),
 			category: filePath,
