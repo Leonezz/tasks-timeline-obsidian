@@ -148,6 +148,7 @@ export class Notice {
 		this.message = message;
 		this.timeout = timeout;
 		// In tests, just log to console
+		// eslint-disable-next-line no-console
 		console.log(`[Notice] ${message}`);
 	}
 }
@@ -278,6 +279,7 @@ export class ItemView {
 	}
 
 	getDisplayText(): string {
+		// eslint-disable-next-line obsidianmd/ui/sentence-case
 		return 'Test View';
 	}
 
