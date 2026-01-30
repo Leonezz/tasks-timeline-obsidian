@@ -10,6 +10,7 @@
 
 import * as path from 'path';
 import { VaultTestRunner } from './vaultTestRunner';
+import { TFile } from '../mocks/obsidian';
 
 describe('ExampleVault E2E Tests', () => {
 	const vaultPath = path.join(__dirname, '../../ExampleVault');
@@ -130,7 +131,7 @@ describe('ExampleVault E2E Tests', () => {
 			const vault = runner.getVault();
 			const file = vault.getAbstractFileByPath('MockTasks.md');
 
-			if (file) {
+			if (file instanceof TFile) {
 				const metadataCache = runner.getMetadataCache();
 				const metadata = metadataCache.getFileCache(file);
 
