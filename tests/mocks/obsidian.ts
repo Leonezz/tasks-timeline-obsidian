@@ -217,15 +217,33 @@ export interface PluginManifest {
 	isDesktopOnly: boolean;
 }
 
+export class SecretStorage {
+	private secrets = new Map<string, string>();
+
+	setSecret(id: string, secret: string): void {
+		this.secrets.set(id, secret);
+	}
+
+	getSecret(id: string): string | null {
+		return this.secrets.get(id) ?? null;
+	}
+
+	listSecrets(): string[] {
+		return Array.from(this.secrets.keys());
+	}
+}
+
 export class App {
 	vault: Vault;
 	metadataCache: MetadataCache;
 	workspace: Workspace;
+	secretStorage: SecretStorage;
 
 	constructor() {
 		this.vault = new Vault();
 		this.metadataCache = new MetadataCache();
 		this.workspace = new Workspace();
+		this.secretStorage = new SecretStorage();
 	}
 }
 
