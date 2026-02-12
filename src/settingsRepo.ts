@@ -1,5 +1,6 @@
 import { AppSettings, SettingsRepository } from "@tasks-timeline/components";
 import TasksTimelineObsidianPlugin from "main";
+import { resolveSecrets, extractAndStoreSecrets } from "./secretStorage";
 
 export class ObsidianSettingRepo implements SettingsRepository {
 	private plugin: TasksTimelineObsidianPlugin;
@@ -12,7 +13,11 @@ export class ObsidianSettingRepo implements SettingsRepository {
 			this.plugin
 				.loadSettings()
 				.then(() => {
-					rsv(this.plugin.settings.appSetting);
+					const settings = resolveSecrets(
+						this.plugin.app,
+						this.plugin.settings.appSetting
+					);
+					rsv(settings);
 				})
 				.catch((e) => {
 					if (e instanceof Error) rej(e);
@@ -21,7 +26,8 @@ export class ObsidianSettingRepo implements SettingsRepository {
 		});
 	}
 	saveSettings(settings: AppSettings): Promise<void> {
-		this.plugin.settings.appSetting = settings;
+		const cleaned = extractAndStoreSecrets(this.plugin.app, settings);
+		this.plugin.settings.appSetting = cleaned;
 		return this.plugin.saveSettings();
 	}
 }

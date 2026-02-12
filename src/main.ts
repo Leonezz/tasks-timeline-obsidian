@@ -1,11 +1,14 @@
 import { Plugin } from "obsidian";
 import {
+	CURRENT_SETTINGS_VERSION,
 	DEFAULT_SETTINGS,
 	TasksTimelinePluginSettings as TasksTimelineObsidianPluginSettings,
 	TasksTimelineSettingTab,
 } from "./settings";
 import { TasksTimelineObsidianView, VIEW_TYPE } from "./view";
 import { Events, TypedBus } from "./eventbus";
+import { migrateSettings } from "./settingsMigration";
+import { migrateExistingKeysToSecretStorage } from "./secretStorage";
 
 export default class TasksTimelineObsidianPlugin extends Plugin {
 	settings: TasksTimelineObsidianPluginSettings;
@@ -53,11 +56,34 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<TasksTimelineObsidianPluginSettings>
+		const raw = (await this.loadData()) as
+			| Partial<TasksTimelineObsidianPluginSettings>
+			| undefined;
+
+		const appSetting = migrateSettings(
+			raw?.appSetting,
+			DEFAULT_SETTINGS.appSetting
 		);
+
+		this.settings = {
+			systemInDarkMode:
+				raw?.systemInDarkMode ?? DEFAULT_SETTINGS.systemInDarkMode,
+			appSetting,
+			_settingsVersion: raw?._settingsVersion,
+		};
+
+		// One-time migration: move plaintext keys to SecretStorage
+		if (
+			this.settings._settingsVersion === undefined ||
+			this.settings._settingsVersion < CURRENT_SETTINGS_VERSION
+		) {
+			this.settings.appSetting = migrateExistingKeysToSecretStorage(
+				this.app,
+				this.settings.appSetting
+			);
+			this.settings._settingsVersion = CURRENT_SETTINGS_VERSION;
+			await this.saveSettings();
+		}
 	}
 
 	async saveSettings() {

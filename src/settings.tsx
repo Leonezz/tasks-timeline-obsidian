@@ -11,11 +11,15 @@ import {
 	SortState,
 } from "@tasks-timeline/components";
 import { unmountReactRoot } from "./view";
+import { extractAndStoreSecrets } from "./secretStorage";
 
 export interface TasksTimelinePluginSettings {
 	appSetting: AppSettings;
 	systemInDarkMode: boolean;
+	_settingsVersion?: number;
 }
+
+export const CURRENT_SETTINGS_VERSION = 2;
 
 export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 	appSetting: {
@@ -47,11 +51,30 @@ export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 					baseUrl: "",
 					model: "",
 				},
+				"openai-compatible": {
+					apiKey: "",
+					baseUrl: "",
+					model: "",
+				},
 			},
 		},
-
-		enableVoiceInput: true,
-		voiceProvider: "browser",
+		voiceConfig: {
+			enabled: true,
+			activeProvider: "browser",
+			language: "en-US",
+			providers: {
+				browser: {},
+				openai: {
+					apiKey: "",
+					baseUrl: "",
+					model: "",
+				},
+				gemini: {
+					apiKey: "",
+					model: "",
+				},
+			},
+		},
 		defaultFocusMode: true,
 		totalTokenUsage: 0,
 		defaultCategory: "",
@@ -70,6 +93,7 @@ export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 		},
 	},
 	systemInDarkMode: false,
+	_settingsVersion: CURRENT_SETTINGS_VERSION,
 };
 
 export class TasksTimelineSettingTab extends PluginSettingTab {
@@ -95,7 +119,8 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 			onClose: () => {},
 			settings: this.plugin.settings.appSetting,
 			onUpdateSettings: (s: AppSettings) => {
-				this.plugin.settings.appSetting = s;
+				const cleaned = extractAndStoreSecrets(this.app, s);
+				this.plugin.settings.appSetting = cleaned;
 				void this.plugin.saveSettings();
 			},
 			filters: {
