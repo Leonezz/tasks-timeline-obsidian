@@ -1,9 +1,10 @@
 import { Task, TasksTimelineApp } from "@tasks-timeline/components";
 import { Events } from "eventbus";
 import TasksTimelineObsidianPlugin from "main";
-import { startTransition, useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { ObsidianSettingRepo } from "./settingsRepo";
 import { ObsidianTasksRepo } from "./tasksRepo";
+import { createRenderTitle } from "./titleRenderer";
 import { App, debounce, Notice, Pos, TFile } from "obsidian";
 
 interface ObsidianAdaptorProps {
@@ -68,6 +69,7 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 	// Stable repository instance that holds the cache
 	const stableTasksRepo = useRef(new ObsidianTasksRepo(plugin));
 	const [settingsRepo] = useState(() => new ObsidianSettingRepo(plugin));
+	const renderTitle = useMemo(() => createRenderTitle(plugin.app), [plugin]);
 
 	// Load tasks on mount and when refreshToken changes
 	const loadTasks = async () => {
@@ -177,6 +179,7 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			settingsRepository={settingsRepo}
 			systemInDarkMode={isDarkMode}
 			onItemClick={(item) => handleItemClick(item, plugin.app)}
+			renderTitle={renderTitle}
 		/>
 	);
 };
