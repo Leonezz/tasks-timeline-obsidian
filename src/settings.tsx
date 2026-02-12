@@ -35,6 +35,7 @@ export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 			enabled: true,
 			defaultMode: true,
 			activeProvider: "gemini",
+			systemPrompt: "",
 			providers: {
 				gemini: {
 					apiKey: "",

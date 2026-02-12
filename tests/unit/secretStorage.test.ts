@@ -20,6 +20,7 @@ const defaultAppSetting: AppSettings = {
 		enabled: true,
 		defaultMode: true,
 		activeProvider: "gemini",
+		systemPrompt: "",
 		providers: {
 			gemini: { apiKey: "", baseUrl: "", model: "" },
 			anthropic: { apiKey: "", baseUrl: "", model: "" },

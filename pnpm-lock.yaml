@@ -10,7 +10,7 @@ importers:
     dependencies:
       '@tasks-timeline/components':
         specifier: latest
-        version: 0.1.2(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        version: 0.1.3(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       ahooks:
         specifier: ^3.9.6
         version: 3.9.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -1382,8 +1382,8 @@ packages:
   '@sinonjs/fake-timers@13.0.5':
     resolution: {integrity: sha512-36/hTbH2uaWuGVERyC6da9YwGWnzUZXuPro/F2LfsdOsLnCojz/iSH8MxUt/FD2S5XBSVPhmArFUXcpCQ2Hkiw==}
 
-  '@tasks-timeline/components@0.1.2':
-    resolution: {integrity: sha512-2WkPPU7zAMXWuvyeOpw9UwEute8tm4uc8MZg76wxrmVu/2+YGEUnmr6MhAvUdbDvrxecWI2UEJJL/coDkkWKtA==}
+  '@tasks-timeline/components@0.1.3':
+    resolution: {integrity: sha512-H0Cs1rlMzYmFmMSClYARUsqOcxw25nOsTFaAelbH8JZ1Q/LEDCTmRWWfU/HY8jkDsiJgc6KP2SsSdJVdnero0g==}
     peerDependencies:
       '@anthropic-ai/sdk': '>=0.30.0'
       openai: '>=4.0.0'
@@ -5164,7 +5164,7 @@ snapshots:
     dependencies:
       '@sinonjs/commons': 3.0.1
 
-  '@tasks-timeline/components@0.1.2(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@tasks-timeline/components@0.1.3(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
       '@google/genai': 1.38.0
       '@radix-ui/react-collapsible': 1.1.12(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
