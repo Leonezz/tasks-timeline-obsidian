@@ -113,6 +113,26 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 		}
 	}
 
+	async restartMcpServer(): Promise<void> {
+		if (this.mcpServer) {
+			await this.mcpServer.stop();
+			this.mcpServer = null;
+		}
+
+		if (this.settings.mcpServer.enabled) {
+			this.mcpServer = new ObsidianMcpServer(this);
+			try {
+				await this.mcpServer.start();
+			} catch (error) {
+				console.error("Failed to start MCP server:", error);
+				new Notice(
+					// eslint-disable-next-line obsidianmd/ui/sentence-case
+					"MCP server failed to start. Check console for details.",
+				);
+			}
+		}
+	}
+
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}

@@ -151,8 +151,45 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 			availableTags: [],
 		};
 
-		// Stop observing in onunload()
-		// themeObserver.disconnect();
+		// --- MCP server settings (native Obsidian UI) ---
+		// eslint-disable-next-line obsidianmd/ui/sentence-case
+		new Setting(containerEl).setName("MCP server").setHeading();
+
+		new Setting(containerEl)
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
+			.setName("Enable MCP server")
+			.setDesc(
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				"Start a local MCP server so AI agents can read and write tasks.",
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.mcpServer.enabled)
+					.onChange(async (value) => {
+						this.plugin.settings.mcpServer.enabled = value;
+						await this.plugin.saveSettings();
+						await this.plugin.restartMcpServer();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName("Port")
+			.setDesc(
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				"Port number for the MCP server (1024\u201365535). Requires restart.",
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("27182")
+					.setValue(String(this.plugin.settings.mcpServer.port))
+					.onChange(async (value) => {
+						const port = parseInt(value, 10);
+						if (!isNaN(port) && port >= 1024 && port <= 65535) {
+							this.plugin.settings.mcpServer.port = port;
+							await this.plugin.saveSettings();
+						}
+					}),
+			);
 
 		const tagSettings = new Setting(containerEl);
 		this.root = createRoot(tagSettings.settingEl);
