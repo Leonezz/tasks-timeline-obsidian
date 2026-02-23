@@ -54,7 +54,6 @@ export default defineConfig(async ({ mode }) => {
 					"@lezer/highlight",
 					"@lezer/lr",
 					...builtins,
-					/^@modelcontextprotocol\/sdk/,
 				],
 			},
 		},
