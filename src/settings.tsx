@@ -6,11 +6,7 @@ import {
 	AppSettings,
 	cn,
 	CustomSettingsTab,
-	FilterState,
 	SettingsPage,
-	SortDirection,
-	SortField,
-	SortState,
 } from "@tasks-timeline/components";
 import { unmountReactRoot } from "./view";
 import { extractAndStoreSecrets } from "./secretStorage";
@@ -106,6 +102,48 @@ export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 		port: 27182,
 	},
 };
+
+/**
+ * Wrapper that holds AppSettings in React state so the SettingsPage
+ * re-renders when onUpdateSettings is called.  Without this, the
+ * Obsidian PluginSettingTab passes a static reference that never
+ * triggers a React re-render.
+ */
+function SettingsPageWrapper({
+	initialSettings,
+	onPersistSettings,
+	availableCategories,
+	availableTags,
+	inDarkMode,
+	customTabs,
+}: {
+	initialSettings: AppSettings;
+	onPersistSettings: (s: AppSettings) => void;
+	availableCategories: string[];
+	availableTags: string[];
+	inDarkMode: boolean;
+	customTabs: CustomSettingsTab[];
+}) {
+	const [settings, setSettings] = useState(initialSettings);
+
+	const handleUpdateSettings = (s: AppSettings) => {
+		setSettings(s);
+		onPersistSettings(s);
+	};
+
+	return (
+		<SettingsPage
+			settings={settings}
+			onUpdateSettings={handleUpdateSettings}
+			availableCategories={availableCategories}
+			availableTags={availableTags}
+			onClose={undefined}
+			inSeperatePage
+			inDarkMode={inDarkMode}
+			customTabs={customTabs}
+		/>
+	);
+}
 
 function McpServerSettings({
 	enabled: initialEnabled,
@@ -229,34 +267,6 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 		const container = containerEl;
 		container.empty();
 
-		const args = {
-			isOpen: true,
-			onClose: () => {},
-			settings: this.plugin.settings.appSetting,
-			onUpdateSettings: (s: AppSettings) => {
-				const cleaned = extractAndStoreSecrets(this.app, s);
-				this.plugin.settings.appSetting = cleaned;
-				void this.plugin.saveSettings();
-			},
-			filters: {
-				tags: [],
-				categories: [],
-				priorities: [],
-				statuses: [],
-				enableScript: false,
-				script: "",
-			},
-			onFilterChange: (s: FilterState) => {},
-			sort: {
-				field: "createdAt" as SortField,
-				direction: "asc" as SortDirection,
-				script: "",
-			},
-			onSortChange: (s: SortState) => {},
-			availableCategories: [],
-			availableTags: [],
-		};
-
 		const mcpTab: CustomSettingsTab = {
 			id: "mcp-server",
 			label: "MCP Server",
@@ -282,10 +292,15 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 		this.root = createRoot(tagSettings.settingEl);
 		this.root.render(
 			<React.StrictMode>
-				<SettingsPage
-					{...args}
-					onClose={undefined}
-					inSeperatePage
+				<SettingsPageWrapper
+					initialSettings={this.plugin.settings.appSetting}
+					onPersistSettings={(s) => {
+						const cleaned = extractAndStoreSecrets(this.app, s);
+						this.plugin.settings.appSetting = cleaned;
+						void this.plugin.saveSettings();
+					}}
+					availableCategories={[]}
+					availableTags={[]}
 					inDarkMode={this.plugin.settings.systemInDarkMode}
 					customTabs={[mcpTab]}
 				/>
