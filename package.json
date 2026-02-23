@@ -44,6 +44,7 @@
 		"vite": "^7.2.4"
 	},
 	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.26.0",
 		"@tasks-timeline/components": "latest",
 		"ahooks": "^3.9.6",
 		"emoji-regex": "^10.6.0",
