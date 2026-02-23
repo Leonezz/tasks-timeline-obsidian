@@ -1,9 +1,10 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import TasksTimelineObsidianPlugin from "./main";
 import { createRoot, Root as ReactRoot } from "react-dom/client";
-import React, { useCallback, useState } from "react";
+import React, { useState } from "react";
 import {
 	AppSettings,
+	cn,
 	CustomSettingsTab,
 	FilterState,
 	SettingsPage,
@@ -121,104 +122,91 @@ function McpServerSettings({
 	const [port, setPort] = useState(String(initialPort));
 	const [portError, setPortError] = useState("");
 
-	const handleToggle = useCallback(async () => {
+	const handleToggle = () => {
 		const next = !enabled;
 		setEnabled(next);
-		await onToggle(next);
-	}, [enabled, onToggle]);
+		void onToggle(next);
+	};
 
-	const handlePortChange = useCallback(
-		(e: React.ChangeEvent<HTMLInputElement>) => {
-			const value = e.target.value;
-			setPort(value);
+	const handlePortChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const value = e.target.value;
+		setPort(value);
 
-			const parsed = parseInt(value, 10);
-			if (isNaN(parsed) || parsed < 1024 || parsed > 65535) {
-				setPortError("Port must be between 1024 and 65535");
-				return;
-			}
+		const parsed = parseInt(value, 10);
+		if (isNaN(parsed) || parsed < 1024 || parsed > 65535) {
+			setPortError("Port must be between 1024 and 65535");
+			return;
+		}
 
-			setPortError("");
-			void onPortChange(parsed);
-		},
-		[onPortChange],
-	);
+		setPortError("");
+		void onPortChange(parsed);
+	};
 
 	return (
-		<div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-				}}
-			>
-				<div>
-					<div style={{ fontWeight: 500 }}>Enable MCP server</div>
-					<div style={{ fontSize: "0.85em", opacity: 0.7 }}>
-						Start a local MCP server so AI agents can read and write
-						tasks.
-					</div>
-				</div>
-				<button
-					onClick={() => void handleToggle()}
-					style={{
-						padding: "4px 12px",
-						borderRadius: "4px",
-						border: "1px solid var(--background-modifier-border)",
-						background: enabled
-							? "var(--interactive-accent)"
-							: "var(--background-secondary)",
-						color: enabled
-							? "var(--text-on-accent)"
-							: "var(--text-normal)",
-						cursor: "pointer",
-					}}
-				>
-					{enabled ? "On" : "Off"}
-				</button>
-			</div>
+		<div className="p-6 space-y-8">
+			<section>
+				<h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
+					MCP Server
+				</h3>
 
-			<div>
-				<div style={{ fontWeight: 500, marginBottom: "4px" }}>Port</div>
-				<div
-					style={{
-						fontSize: "0.85em",
-						opacity: 0.7,
-						marginBottom: "8px",
-					}}
-				>
-					Port number for the MCP server. Toggle off and on to apply
-					changes.
-				</div>
-				<input
-					type="number"
-					value={port}
-					onChange={handlePortChange}
-					placeholder="27182"
-					min={1024}
-					max={65535}
-					style={{
-						width: "120px",
-						padding: "4px 8px",
-						borderRadius: "4px",
-						border: "1px solid var(--background-modifier-border)",
-						background: "var(--background-secondary)",
-						color: "var(--text-normal)",
-					}}
-				/>
-				{portError && (
-					<div
-						style={{
-							color: "var(--text-error)",
-							fontSize: "0.85em",
-							marginTop: "4px",
-						}}
-					>
-						{portError}
+				<div className="space-y-4">
+					{/* Enable toggle */}
+					<div className="flex items-center justify-between">
+						<div className="flex flex-col">
+							<span className="text-sm font-medium text-slate-700">
+								Enable MCP Server
+							</span>
+							<span className="text-xs text-slate-400">
+								Start a local server so AI agents can read and
+								write tasks
+							</span>
+						</div>
+						<button
+							onClick={handleToggle}
+							className={cn(
+								"relative w-10 h-6 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400",
+								enabled
+									? "bg-blue-500"
+									: "bg-slate-200 dark:bg-slate-700",
+							)}
+						>
+							<span
+								className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-sm block transition-transform"
+								style={{
+									transform: enabled
+										? "translateX(16px)"
+										: "translateX(0)",
+								}}
+							/>
+						</button>
 					</div>
-				)}
-			</div>
+
+					{/* Port */}
+					<div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+						<label className="text-xs font-medium text-slate-500 block mb-2">
+							Port
+						</label>
+						<input
+							type="number"
+							value={port}
+							onChange={handlePortChange}
+							placeholder="27182"
+							min={1024}
+							max={65535}
+							className="w-28 px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500"
+						/>
+						<p className="text-[10px] text-slate-400 mt-1 pl-1">
+							Range: 1024–65535. Toggle off and on to apply
+							changes.
+						</p>
+						{portError && (
+							<p className="text-[10px] text-red-500 mt-1 pl-1">
+								{portError}
+							</p>
+						)}
+					</div>
+				</div>
+			</section>
 		</div>
 	);
 }
