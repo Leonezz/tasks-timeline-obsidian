@@ -38,6 +38,7 @@ export default defineConfig(async ({ mode }) => {
 				output: {
 					entryFileNames: "main.js",
 					assetFileNames: "styles.css",
+					inlineDynamicImports: true,
 				},
 				external: [
 					"obsidian",

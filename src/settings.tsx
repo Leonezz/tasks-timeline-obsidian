@@ -9,7 +9,7 @@ import {
 	SettingsPage,
 } from "@tasks-timeline/components";
 import { unmountReactRoot } from "./view";
-import { extractAndStoreSecrets } from "./secretStorage";
+import { extractAndStoreSecrets, resolveSecrets } from "./secretStorage";
 
 export interface TasksTimelinePluginSettings {
 	appSetting: AppSettings;
@@ -293,7 +293,10 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 		this.root.render(
 			<React.StrictMode>
 				<SettingsPageWrapper
-					initialSettings={this.plugin.settings.appSetting}
+					initialSettings={resolveSecrets(
+						this.app,
+						this.plugin.settings.appSetting,
+					)}
 					onPersistSettings={(s) => {
 						const cleaned = extractAndStoreSecrets(this.app, s);
 						this.plugin.settings.appSetting = cleaned;
