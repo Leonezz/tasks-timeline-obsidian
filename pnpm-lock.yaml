@@ -13,7 +13,7 @@ importers:
         version: 1.26.0(zod@4.3.6)
       '@tasks-timeline/components':
         specifier: latest
-        version: 0.2.0(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        version: 0.2.1(@google/genai@1.38.0(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6)))(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       ahooks:
         specifier: ^3.9.6
         version: 3.9.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -1401,15 +1401,18 @@ packages:
   '@sinonjs/fake-timers@13.0.5':
     resolution: {integrity: sha512-36/hTbH2uaWuGVERyC6da9YwGWnzUZXuPro/F2LfsdOsLnCojz/iSH8MxUt/FD2S5XBSVPhmArFUXcpCQ2Hkiw==}
 
-  '@tasks-timeline/components@0.2.0':
-    resolution: {integrity: sha512-L3Ux5suns6XWvH4G9aSz9DCvLI0ViuacEL8QPWMxr9jZ0QWNaY2tMPdju378AeSu0OEb1GgkjGTn85VRcDHkjw==}
+  '@tasks-timeline/components@0.2.1':
+    resolution: {integrity: sha512-VCNv64SrWK4jHvG+HZTxUuWRsSB192xAhBPOD8ObofbHXbVD8ybrqTeSAKTfsXggzw3EZqihZTu71ubNaMMYZw==}
     peerDependencies:
       '@anthropic-ai/sdk': '>=0.30.0'
+      '@google/genai': '>=1.0.0'
       openai: '>=4.0.0'
       react: ^19.2.3
       react-dom: ^19.2.3
     peerDependenciesMeta:
       '@anthropic-ai/sdk':
+        optional: true
+      '@google/genai':
         optional: true
       openai:
         optional: true
@@ -4682,6 +4685,7 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
+    optional: true
 
   '@hono/node-server@1.19.9(hono@4.12.2)':
     dependencies:
@@ -4985,28 +4989,38 @@ snapshots:
 
   '@pkgr/core@0.2.9': {}
 
-  '@protobufjs/aspromise@1.1.2': {}
+  '@protobufjs/aspromise@1.1.2':
+    optional: true
 
-  '@protobufjs/base64@1.1.2': {}
+  '@protobufjs/base64@1.1.2':
+    optional: true
 
-  '@protobufjs/codegen@2.0.4': {}
+  '@protobufjs/codegen@2.0.4':
+    optional: true
 
-  '@protobufjs/eventemitter@1.1.0': {}
+  '@protobufjs/eventemitter@1.1.0':
+    optional: true
 
   '@protobufjs/fetch@1.1.0':
     dependencies:
       '@protobufjs/aspromise': 1.1.2
       '@protobufjs/inquire': 1.1.0
+    optional: true
 
-  '@protobufjs/float@1.0.2': {}
+  '@protobufjs/float@1.0.2':
+    optional: true
 
-  '@protobufjs/inquire@1.1.0': {}
+  '@protobufjs/inquire@1.1.0':
+    optional: true
 
-  '@protobufjs/path@1.1.2': {}
+  '@protobufjs/path@1.1.2':
+    optional: true
 
-  '@protobufjs/pool@1.1.0': {}
+  '@protobufjs/pool@1.1.0':
+    optional: true
 
-  '@protobufjs/utf8@1.1.0': {}
+  '@protobufjs/utf8@1.1.0':
+    optional: true
 
   '@radix-ui/primitive@1.1.3': {}
 
@@ -5422,9 +5436,8 @@ snapshots:
     dependencies:
       '@sinonjs/commons': 3.0.1
 
-  '@tasks-timeline/components@0.2.0(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@tasks-timeline/components@0.2.1(@google/genai@1.38.0(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6)))(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
-      '@google/genai': 1.38.0(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))
       '@radix-ui/react-collapsible': 1.1.12(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@radix-ui/react-dialog': 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@radix-ui/react-dropdown-menu': 2.1.16(@types/react-dom@19.2.3(@types/react@19.2.10))(@types/react@19.2.10)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -5446,15 +5459,13 @@ snapshots:
       rrule: 2.8.1
       sonner: 2.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       tailwind-merge: 3.4.0
+    optionalDependencies:
+      '@google/genai': 1.38.0(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))
     transitivePeerDependencies:
       - '@emotion/is-prop-valid'
-      - '@modelcontextprotocol/sdk'
       - '@types/react'
       - '@types/react-dom'
-      - bufferutil
       - prop-types
-      - supports-color
-      - utf-8-validate
 
   '@testing-library/dom@10.4.1':
     dependencies:
@@ -5951,11 +5962,13 @@ snapshots:
 
   balanced-match@1.0.2: {}
 
-  base64-js@1.5.1: {}
+  base64-js@1.5.1:
+    optional: true
 
   baseline-browser-mapping@2.9.19: {}
 
-  bignumber.js@9.3.1: {}
+  bignumber.js@9.3.1:
+    optional: true
 
   body-parser@2.2.2:
     dependencies:
@@ -6000,7 +6013,8 @@ snapshots:
     dependencies:
       node-int64: 0.4.0
 
-  buffer-equal-constant-time@1.0.1: {}
+  buffer-equal-constant-time@1.0.1:
+    optional: true
 
   buffer-from@1.1.2: {}
 
@@ -6100,7 +6114,8 @@ snapshots:
 
   csstype@3.2.3: {}
 
-  data-uri-to-buffer@4.0.1: {}
+  data-uri-to-buffer@4.0.1:
+    optional: true
 
   data-urls@5.0.0:
     dependencies:
@@ -6184,6 +6199,7 @@ snapshots:
   ecdsa-sig-formatter@1.0.11:
     dependencies:
       safe-buffer: 5.2.1
+    optional: true
 
   ee-first@1.1.1: {}
 
@@ -6671,7 +6687,8 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extend@3.0.2: {}
+  extend@3.0.2:
+    optional: true
 
   fast-deep-equal@3.1.3: {}
 
@@ -6705,6 +6722,7 @@ snapshots:
     dependencies:
       node-domexception: 1.0.0
       web-streams-polyfill: 3.3.3
+    optional: true
 
   file-entry-cache@8.0.0:
     dependencies:
@@ -6754,6 +6772,7 @@ snapshots:
   formdata-polyfill@4.0.10:
     dependencies:
       fetch-blob: 3.2.0
+    optional: true
 
   forwarded@0.2.0: {}
 
@@ -6794,6 +6813,7 @@ snapshots:
       rimraf: 5.0.10
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   gcp-metadata@8.1.2:
     dependencies:
@@ -6802,6 +6822,7 @@ snapshots:
       json-bigint: 1.0.0
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   generator-function@2.0.1: {}
 
@@ -6889,8 +6910,10 @@ snapshots:
       jws: 4.0.1
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
-  google-logging-utils@1.1.3: {}
+  google-logging-utils@1.1.3:
+    optional: true
 
   gopd@1.2.0: {}
 
@@ -6904,6 +6927,7 @@ snapshots:
       jws: 4.0.1
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   handlebars@4.7.8:
     dependencies:
@@ -7557,6 +7581,7 @@ snapshots:
   json-bigint@1.0.0:
     dependencies:
       bignumber.js: 9.3.1
+    optional: true
 
   json-buffer@3.0.1: {}
 
@@ -7599,11 +7624,13 @@ snapshots:
       buffer-equal-constant-time: 1.0.1
       ecdsa-sig-formatter: 1.0.11
       safe-buffer: 5.2.1
+    optional: true
 
   jws@4.0.1:
     dependencies:
       jwa: 2.0.1
       safe-buffer: 5.2.1
+    optional: true
 
   keyv@4.5.4:
     dependencies:
@@ -7632,7 +7659,8 @@ snapshots:
 
   lodash@4.17.23: {}
 
-  long@5.3.2: {}
+  long@5.3.2:
+    optional: true
 
   loose-envify@1.4.0:
     dependencies:
@@ -7732,13 +7760,15 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
-  node-domexception@1.0.0: {}
+  node-domexception@1.0.0:
+    optional: true
 
   node-fetch@3.3.2:
     dependencies:
       data-uri-to-buffer: 4.0.1
       fetch-blob: 3.2.0
       formdata-polyfill: 4.0.10
+    optional: true
 
   node-int64@0.4.0: {}
 
@@ -7938,6 +7968,7 @@ snapshots:
       '@protobufjs/utf8': 1.1.0
       '@types/node': 16.18.126
       long: 5.3.2
+    optional: true
 
   proxy-addr@2.0.7:
     dependencies:
@@ -8078,6 +8109,7 @@ snapshots:
   rimraf@5.0.10:
     dependencies:
       glob: 10.5.0
+    optional: true
 
   rollup@4.57.0:
     dependencies:
@@ -8632,7 +8664,8 @@ snapshots:
     dependencies:
       makeerror: 1.0.12
 
-  web-streams-polyfill@3.3.3: {}
+  web-streams-polyfill@3.3.3:
+    optional: true
 
   webidl-conversions@7.0.0: {}
 
