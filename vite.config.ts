@@ -1,7 +1,7 @@
 import { UserConfig, defineConfig } from "vite";
 import path from "path";
 import builtins from "builtin-modules";
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,7 +28,9 @@ export default defineConfig(async ({ mode }) => {
 			sourcemap: prod ? false : "inline",
 			cssCodeSplit: false,
 			emptyOutDir: false,
-			outDir: prod ? "./dist" : "ExampleVault/.obsidian/plugins/tasks-timeline-obsidian/",
+			outDir: prod
+				? "./dist"
+				: "ExampleVault/.obsidian/plugins/tasks-timeline-obsidian/",
 			rollupOptions: {
 				input: {
 					main: resolve(__dirname, "src/main.ts"),
@@ -52,6 +54,7 @@ export default defineConfig(async ({ mode }) => {
 					"@lezer/highlight",
 					"@lezer/lr",
 					...builtins,
+					/^@modelcontextprotocol\/sdk/,
 				],
 			},
 		},

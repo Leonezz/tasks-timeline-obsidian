@@ -17,6 +17,10 @@ export interface TasksTimelinePluginSettings {
 	appSetting: AppSettings;
 	systemInDarkMode: boolean;
 	_settingsVersion?: number;
+	mcpServer: {
+		enabled: boolean;
+		port: number;
+	};
 }
 
 export const CURRENT_SETTINGS_VERSION = 2;
@@ -95,6 +99,10 @@ export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 	},
 	systemInDarkMode: false,
 	_settingsVersion: CURRENT_SETTINGS_VERSION,
+	mcpServer: {
+		enabled: false,
+		port: 27182,
+	},
 };
 
 export class TasksTimelineSettingTab extends PluginSettingTab {
@@ -156,7 +164,7 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 					inSeperatePage
 					inDarkMode={this.plugin.settings.systemInDarkMode}
 				/>
-			</React.StrictMode>
+			</React.StrictMode>,
 		);
 	}
 }
