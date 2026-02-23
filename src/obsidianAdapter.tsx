@@ -46,7 +46,7 @@ const handleItemClick = (item: Task, app: App) => {
 				{
 					line: position.start.line,
 					ch: position.end.col,
-				}
+				},
 			);
 			if (!app.workspace.activeEditor?.editor?.hasFocus()) {
 				app.workspace.activeEditor?.editor?.focus();
@@ -60,7 +60,7 @@ const handleItemClick = (item: Task, app: App) => {
 
 export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 	const [isDarkMode, setIsDarkMode] = useState(
-		plugin.settings.systemInDarkMode
+		plugin.settings.systemInDarkMode,
 	);
 
 	// Tasks state - loaded from repository
@@ -68,7 +68,9 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 
 	// Stable repository instance that holds the cache
 	const stableTasksRepo = useRef(new ObsidianTasksRepo(plugin));
-	const [settingsRepo] = useState(() => new ObsidianSettingRepo(plugin));
+	const [settingsRepo, setSettingsRepo] = useState(
+		() => new ObsidianSettingRepo(plugin),
+	);
 	const renderTitle = useMemo(() => createRenderTitle(plugin.app), [plugin]);
 
 	// Load tasks on mount and when refreshToken changes
@@ -90,9 +92,22 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			"system:themeChange",
 			({ isDarkMode }: Events["system:themeChange"]) => {
 				setIsDarkMode(isDarkMode);
-			}
+			},
 		);
 	}, []);
+
+	// Reload settings when changed from the settings page
+	useEffect(() => {
+		return plugin.bus.on("settings:changed", () => {
+			void settingsRepo.loadSettings().then((s) => {
+				if (s) {
+					// Force TasksTimelineApp to re-render with fresh settings
+					// by replacing the repo instance, which resets internal state.
+					setSettingsRepo(new ObsidianSettingRepo(plugin));
+				}
+			});
+		});
+	}, [plugin, settingsRepo]);
 
 	// Listen to vault changes
 	useEffect(() => {
@@ -102,7 +117,7 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 				void loadTasks();
 			},
 			1000,
-			false
+			false,
 		);
 
 		const eventRef = plugin.app.vault.on("modify", (file) => {
@@ -150,9 +165,7 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 		try {
 			await stableTasksRepo.current.updateTask(task);
 			// Update local state only after successful save
-			setTasks((prev) =>
-				prev.map((t) => (t.id === task.id ? task : t))
-			);
+			setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
 		} catch (error) {
 			console.error("Failed to update task:", error);
 			new Notice("Failed to update task. Changes not saved.");

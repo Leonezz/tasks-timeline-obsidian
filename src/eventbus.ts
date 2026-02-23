@@ -1,5 +1,6 @@
 export type Events = {
 	"system:themeChange": { isDarkMode: boolean };
+	"settings:changed": Record<string, never>;
 };
 
 export class TypedBus<E extends Record<string, unknown>> {
@@ -25,7 +26,10 @@ export class TypedBus<E extends Record<string, unknown>> {
 				try {
 					fn(payload);
 				} catch (e) {
-					console.error(`Event handler for ${String(event)} threw:`, e);
+					console.error(
+						`Event handler for ${String(event)} threw:`,
+						e,
+					);
 				}
 			});
 		console.debug("emit: ", event, ", listeners: ", this.map[event]?.size);

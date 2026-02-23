@@ -298,6 +298,7 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 						const cleaned = extractAndStoreSecrets(this.app, s);
 						this.plugin.settings.appSetting = cleaned;
 						void this.plugin.saveSettings();
+						this.plugin.bus.emit("settings:changed", {});
 					}}
 					availableCategories={[]}
 					availableTags={[]}
