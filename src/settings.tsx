@@ -538,8 +538,10 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 					);
 				}
 				if (Array.isArray(fm["tags"])) {
-					for (const t of fm["tags"] as string[]) {
-						tagSet.add(t.startsWith("#") ? t : "#" + t);
+					for (const t of fm["tags"]) {
+						if (typeof t === "string") {
+							tagSet.add(t.startsWith("#") ? t : "#" + t);
+						}
 					}
 				}
 			}
