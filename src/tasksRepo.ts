@@ -65,8 +65,8 @@ export class ObsidianTasksRepo implements TaskRepository {
 								cache.sections,
 								cache.links,
 								cache.frontmatter,
-								cache.tags
-							)
+								cache.tags,
+							),
 						)
 						.filter((item): item is Task => !!item) || [];
 
@@ -82,7 +82,18 @@ export class ObsidianTasksRepo implements TaskRepository {
 					.map((task) => ({
 						...task,
 						tags: task.tags || [],
-					}));
+					}))
+					.map((task) => {
+						const seen = new Set<string>();
+						return {
+							...task,
+							tags: task.tags.filter((tag) => {
+								if (seen.has(tag.name)) return false;
+								seen.add(tag.name);
+								return true;
+							}),
+						};
+					});
 
 				this.fileTaskCache.set(file.path, processedTasks);
 				return processedTasks;
@@ -98,7 +109,9 @@ export class ObsidianTasksRepo implements TaskRepository {
 
 		// Notify user if some files couldn't be read
 		if (failedFiles.length > 0) {
-			new Notice(`Warning: ${failedFiles.length} file(s) could not be read. Some tasks may be missing.`);
+			new Notice(
+				`Warning: ${failedFiles.length} file(s) could not be read. Some tasks may be missing.`,
+			);
 			console.warn("Failed to read files:", failedFiles);
 		}
 
@@ -152,16 +165,24 @@ export class ObsidianTasksRepo implements TaskRepository {
 							lineIndex = pos.start.line;
 						}
 						// Trimmed match (handles trailing whitespace differences)
-						else if (storedRawText && lineAtPos.trim() === storedRawText.trim()) {
+						else if (
+							storedRawText &&
+							lineAtPos.trim() === storedRawText.trim()
+						) {
 							lineIndex = pos.start.line;
 						}
 						// Line is still a task at this position (fallback)
-						else if (TaskRegularExpressions.taskRegex.test(lineAtPos)) {
+						else if (
+							TaskRegularExpressions.taskRegex.test(lineAtPos)
+						) {
 							lineIndex = pos.start.line;
-							console.debug("Using position fallback for task update", {
-								expected: storedRawText,
-								found: lineAtPos,
-							});
+							console.debug(
+								"Using position fallback for task update",
+								{
+									expected: storedRawText,
+									found: lineAtPos,
+								},
+							);
 						}
 					}
 				} catch (e) {
@@ -174,12 +195,17 @@ export class ObsidianTasksRepo implements TaskRepository {
 				lineIndex = lines.indexOf(storedRawText);
 				// Try trimmed match
 				if (lineIndex === -1) {
-					lineIndex = lines.findIndex(l => l.trim() === storedRawText.trim());
+					lineIndex = lines.findIndex(
+						(l) => l.trim() === storedRawText.trim(),
+					);
 				}
 			}
 
 			if (lineIndex === -1) {
-				console.error("Could not find original task line to update", task);
+				console.error(
+					"Could not find original task line to update",
+					task,
+				);
 				return content;
 			}
 
@@ -209,7 +235,9 @@ export class ObsidianTasksRepo implements TaskRepository {
 
 		const file = this.plugin.app.vault.getAbstractFileByPath(cached.file);
 		if (!(file instanceof TFile)) {
-			throw new Error(`Cannot delete task: file not found: ${cached.file}`);
+			throw new Error(
+				`Cannot delete task: file not found: ${cached.file}`,
+			);
 		}
 
 		let deleteSucceeded = false;
@@ -238,7 +266,10 @@ export class ObsidianTasksRepo implements TaskRepository {
 			}
 
 			if (lineIndex === -1) {
-				console.error("Could not find task line to delete", cached.rawText);
+				console.error(
+					"Could not find task line to delete",
+					cached.rawText,
+				);
 				return content;
 			}
 
@@ -277,7 +308,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 		sections?: SectionCache[],
 		links?: LinkCache[],
 		fontmatter?: FrontMatterCache,
-		tagsCache?: TagCache[]
+		tagsCache?: TagCache[],
 	) {
 		return (item: ListItemCache) => {
 			if (!item.task) return null;
@@ -329,8 +360,8 @@ export class ObsidianTasksRepo implements TaskRepository {
 			const parentLink = parentItem
 				? link.withSectionCache(
 						parentItem,
-						sliceFileContent(parentItem?.position)
-				  )
+						sliceFileContent(parentItem?.position),
+					)
 				: link;
 			const outLinkLinks = outLinks
 				? outLinks.map((v) => Link.withLinkCache(v))
@@ -345,7 +376,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 				itemPos,
 				outLinkLinks,
 				fontmatter,
-				tags || []
+				tags || [],
 			);
 		};
 	}
@@ -374,7 +405,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 		//children: TaskDataModel[],
 		//annotated: boolean,
 		frontMatter: FrontMatterCache | undefined,
-		tags: string[]
+		tags: string[],
 	): Task | null {
 		// Check the line to see if it is a markdown task.
 		const regexMatch = line.match(TaskRegularExpressions.taskRegex);
@@ -398,7 +429,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 		// Match for block link and remove if found. Always expected to be
 		// at the end of the line.
 		const blockLinkMatch = description.match(
-			TaskRegularExpressions.blockLinkRegex
+			TaskRegularExpressions.blockLinkRegex,
 		);
 		const blockLink = blockLinkMatch !== null ? blockLinkMatch[0] : "";
 
@@ -418,10 +449,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 				tags.push(tag);
 				frontmatterTags.push(tag);
 			}
-			if (
-				frontMatter["tags"] &&
-				Array.isArray(frontMatter["tags"])
-			) {
+			if (frontMatter["tags"] && Array.isArray(frontMatter["tags"])) {
 				(frontMatter["tags"] as string[]).forEach((t) => {
 					const tag = t.startsWith("#") ? t : "#" + t;
 					tags.push(tag);

@@ -193,7 +193,7 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			systemInDarkMode={isDarkMode}
 			onItemClick={(item) => handleItemClick(item, plugin.app)}
 			renderTitle={renderTitle}
-			aiSystemPrompt="In this Obsidian vault, each task's category is derived from the name of the note file it belongs to. When reasoning about tasks, treat the category as the file-level topic or project the task is part of."
+			aiSystemPrompt="In this Obsidian vault, each task's category is derived from the path of the note file it belongs to. When reasoning about tasks, treat the category as the file-level topic or project the task is part of."
 		/>
 	);
 };
