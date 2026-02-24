@@ -13,13 +13,13 @@ importers:
         version: 0.78.0(zod@4.3.6)
       '@google/genai':
         specifier: ^1.42.0
-        version: 1.42.0(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))
+        version: 1.42.0(@modelcontextprotocol/sdk@1.27.0(zod@4.3.6))
       '@modelcontextprotocol/sdk':
-        specifier: ^1.26.0
-        version: 1.26.0(zod@4.3.6)
+        specifier: ^1.27.0
+        version: 1.27.0(zod@4.3.6)
       '@tasks-timeline/components':
         specifier: latest
-        version: 0.2.2(@anthropic-ai/sdk@0.78.0(zod@4.3.6))(@google/genai@1.42.0(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6)))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(openai@6.22.0(ws@8.19.0)(zod@4.3.6))(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        version: 0.2.5(@anthropic-ai/sdk@0.78.0(zod@4.3.6))(@google/genai@1.42.0(@modelcontextprotocol/sdk@1.27.0(zod@4.3.6)))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(openai@6.24.0(ws@8.19.0)(zod@4.3.6))(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       ahooks:
         specifier: ^3.9.6
         version: 3.9.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -31,10 +31,10 @@ importers:
         version: 3.7.2
       obsidian:
         specifier: latest
-        version: 1.12.2(@codemirror/state@6.5.0)(@codemirror/view@6.38.6)
+        version: 1.12.3(@codemirror/state@6.5.0)(@codemirror/view@6.38.6)
       openai:
-        specifier: ^6.22.0
-        version: 6.22.0(ws@8.19.0)(zod@4.3.6)
+        specifier: ^6.24.0
+        version: 6.24.0(ws@8.19.0)(zod@4.3.6)
       parsimmon:
         specifier: ^1.18.1
         version: 1.18.1
@@ -86,7 +86,7 @@ importers:
         version: 9.39.3(jiti@2.6.1)
       eslint-plugin-obsidianmd:
         specifier: 0.1.9
-        version: 0.1.9(@eslint/js@9.30.1)(@eslint/json@0.14.0)(@typescript-eslint/parser@8.35.1(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.3(jiti@2.6.1))(obsidian@1.12.2(@codemirror/state@6.5.0)(@codemirror/view@6.38.6))(typescript-eslint@8.35.1(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3))
+        version: 0.1.9(@eslint/js@9.30.1)(@eslint/json@0.14.0)(@typescript-eslint/parser@8.35.1(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.3(jiti@2.6.1))(obsidian@1.12.3(@codemirror/state@6.5.0)(@codemirror/view@6.38.6))(typescript-eslint@8.35.1(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3))
       globals:
         specifier: 14.0.0
         version: 14.0.0
@@ -672,8 +672,8 @@ packages:
     resolution: {integrity: sha512-yL/sLrpmtDaFEiUj1osRP4TI2MDz1AddJL+jZ7KSqvBuliN4xqYY54IfdN8qD8Toa6g1iloph1fxQNkjOxrrpQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@eslint/eslintrc@3.3.3':
-    resolution: {integrity: sha512-Kr+LPIUVKz2qkx1HAMH8q1q6azbqBAsXJUxBl/ODDuVPX45Z9DfwB8tPjTi6nNZ8BuM3nbJxC5zCAg5elnBUTQ==}
+  '@eslint/eslintrc@3.3.4':
+    resolution: {integrity: sha512-4h4MVF8pmBsncB60r0wSJiIeUKTSD4m7FmTFThG8RHlsg9ajqckLm9OraguFGZE4vVdpiI1Q4+hFnisopmG6gQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
   '@eslint/js@9.30.1':
@@ -875,8 +875,8 @@ packages:
     peerDependencies:
       eslint: ^9
 
-  '@modelcontextprotocol/sdk@1.26.0':
-    resolution: {integrity: sha512-Y5RmPncpiDtTXDbLKswIJzTqu2hyBKxTNsgKqKclDbhIgg1wgtf1fRuvxgTnRfcnxtvvgbIEcqUOzZrJ6iSReg==}
+  '@modelcontextprotocol/sdk@1.27.0':
+    resolution: {integrity: sha512-qOdO524oPMkUsOJTrsH9vz/HN3B5pKyW+9zIW51A9kDMVe7ON70drz1ouoyoyOcfzc+oxhkQ6jWmbyKnlWmYqA==}
     engines: {node: '>=18'}
     peerDependencies:
       '@cfworker/json-schema': ^4.1.1
@@ -1419,8 +1419,8 @@ packages:
   '@sinonjs/fake-timers@13.0.5':
     resolution: {integrity: sha512-36/hTbH2uaWuGVERyC6da9YwGWnzUZXuPro/F2LfsdOsLnCojz/iSH8MxUt/FD2S5XBSVPhmArFUXcpCQ2Hkiw==}
 
-  '@tasks-timeline/components@0.2.2':
-    resolution: {integrity: sha512-OOjQ3/ZDsAEYvBd+GvMC9PTmkIeyvI3V3M/GxRPqZvmtVbAn7Yp2pnvigshlw+j/psKF8mMroW3DBIO2g4SULw==}
+  '@tasks-timeline/components@0.2.5':
+    resolution: {integrity: sha512-3+PdxQPdJgNLQNHwri8tp9Rof0V7Ko+0g23tlPLXk0xGPzChAq8fZ2nfJiH+yPOWzatUf0vz4tC8OIys1jrPRA==}
     peerDependencies:
       '@anthropic-ai/sdk': '>=0.30.0'
       '@google/genai': '>=1.0.0'
@@ -3343,8 +3343,8 @@ packages:
     resolution: {integrity: sha512-gXah6aZrcUxjWg2zR2MwouP2eHlCBzdV4pygudehaKXSGW4v2AsRQUK+lwwXhii6KFZcunEnmSUoYp5CXibxtA==}
     engines: {node: '>= 0.4'}
 
-  obsidian@1.12.2:
-    resolution: {integrity: sha512-DGAzpt6vo+sMDET/o8Zj26Bj2hbHrFsNUU8TtnzCyerO/OHksMFQnU9QEnPHVsOMstt/WnHXfC56j2r1syObWg==}
+  obsidian@1.12.3:
+    resolution: {integrity: sha512-HxWqe763dOqzXjnNiHmAJTRERN8KILBSqxDSEqbeSr7W8R8Jxezzbca+nz1LiiqXnMpM8lV2jzAezw3CZ4xNUw==}
     peerDependencies:
       '@codemirror/state': 6.5.0
       '@codemirror/view': 6.38.6
@@ -3360,8 +3360,8 @@ packages:
     resolution: {integrity: sha512-kbpaSSGJTWdAY5KPVeMOKXSrPtr8C8C7wodJbcsd51jRnmD+GZu8Y0VoU6Dm5Z4vWr0Ig/1NKuWRKf7j5aaYSg==}
     engines: {node: '>=6'}
 
-  openai@6.22.0:
-    resolution: {integrity: sha512-7Yvy17F33Bi9RutWbsaYt5hJEEJ/krRPOrwan+f9aCPuMat1WVsb2VNSII5W1EksKT6fF69TG/xj4XzodK3JZw==}
+  openai@6.24.0:
+    resolution: {integrity: sha512-WLR+qki3S4c9ZHilR42GDTxEpTrMFeWfcFNg1RMELW0ZCCBJMDDlqVV+QQEM5KN2hjUyZu45QpgJmln/0ykFRg==}
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
@@ -4694,7 +4694,7 @@ snapshots:
     dependencies:
       '@types/json-schema': 7.0.15
 
-  '@eslint/eslintrc@3.3.3':
+  '@eslint/eslintrc@3.3.4':
     dependencies:
       ajv: 6.14.0
       debug: 4.4.3
@@ -4743,14 +4743,14 @@ snapshots:
 
   '@floating-ui/utils@0.2.10': {}
 
-  '@google/genai@1.42.0(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))':
+  '@google/genai@1.42.0(@modelcontextprotocol/sdk@1.27.0(zod@4.3.6))':
     dependencies:
       google-auth-library: 10.5.0
       p-retry: 4.6.2
       protobufjs: 7.5.4
       ws: 8.19.0
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.26.0(zod@4.3.6)
+      '@modelcontextprotocol/sdk': 1.27.0(zod@4.3.6)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -5010,7 +5010,7 @@ snapshots:
       eslint-plugin-react: 7.37.3(eslint@9.39.3(jiti@2.6.1))
       eslint-plugin-security: 1.4.0
 
-  '@modelcontextprotocol/sdk@1.26.0(zod@4.3.6)':
+  '@modelcontextprotocol/sdk@1.27.0(zod@4.3.6)':
     dependencies:
       '@hono/node-server': 1.19.9(hono@4.12.2)
       ajv: 8.18.0
@@ -5495,7 +5495,7 @@ snapshots:
     dependencies:
       '@sinonjs/commons': 3.0.1
 
-  '@tasks-timeline/components@0.2.2(@anthropic-ai/sdk@0.78.0(zod@4.3.6))(@google/genai@1.42.0(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6)))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(openai@6.22.0(ws@8.19.0)(zod@4.3.6))(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@tasks-timeline/components@0.2.5(@anthropic-ai/sdk@0.78.0(zod@4.3.6))(@google/genai@1.42.0(@modelcontextprotocol/sdk@1.27.0(zod@4.3.6)))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(openai@6.24.0(ws@8.19.0)(zod@4.3.6))(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
       '@radix-ui/react-collapsible': 1.1.12(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@radix-ui/react-dialog': 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -5520,8 +5520,8 @@ snapshots:
       tailwind-merge: 3.5.0
     optionalDependencies:
       '@anthropic-ai/sdk': 0.78.0(zod@4.3.6)
-      '@google/genai': 1.42.0(@modelcontextprotocol/sdk@1.26.0(zod@4.3.6))
-      openai: 6.22.0(ws@8.19.0)(zod@4.3.6)
+      '@google/genai': 1.42.0(@modelcontextprotocol/sdk@1.27.0(zod@4.3.6))
+      openai: 6.24.0(ws@8.19.0)(zod@4.3.6)
     transitivePeerDependencies:
       - '@emotion/is-prop-valid'
       - '@types/react'
@@ -6552,7 +6552,7 @@ snapshots:
       minimatch: 9.0.6
       semver: 7.7.4
 
-  eslint-plugin-obsidianmd@0.1.9(@eslint/js@9.30.1)(@eslint/json@0.14.0)(@typescript-eslint/parser@8.35.1(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.3(jiti@2.6.1))(obsidian@1.12.2(@codemirror/state@6.5.0)(@codemirror/view@6.38.6))(typescript-eslint@8.35.1(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3)):
+  eslint-plugin-obsidianmd@0.1.9(@eslint/js@9.30.1)(@eslint/json@0.14.0)(@typescript-eslint/parser@8.35.1(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.3(jiti@2.6.1))(obsidian@1.12.3(@codemirror/state@6.5.0)(@codemirror/view@6.38.6))(typescript-eslint@8.35.1(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3)):
     dependencies:
       '@eslint/js': 9.30.1
       '@eslint/json': 0.14.0
@@ -6565,7 +6565,7 @@ snapshots:
       eslint-plugin-json-schema-validator: 5.1.0(eslint@9.39.3(jiti@2.6.1))
       eslint-plugin-security: 2.1.1
       globals: 14.0.0
-      obsidian: 1.12.2(@codemirror/state@6.5.0)(@codemirror/view@6.38.6)
+      obsidian: 1.12.3(@codemirror/state@6.5.0)(@codemirror/view@6.38.6)
       typescript: 5.4.5
       typescript-eslint: 8.35.1(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3)
     transitivePeerDependencies:
@@ -6620,7 +6620,7 @@ snapshots:
       '@eslint/config-array': 0.21.1
       '@eslint/config-helpers': 0.4.2
       '@eslint/core': 0.17.0
-      '@eslint/eslintrc': 3.3.3
+      '@eslint/eslintrc': 3.3.4
       '@eslint/js': 9.39.3
       '@eslint/plugin-kit': 0.4.1
       '@humanfs/node': 0.16.7
@@ -7886,7 +7886,7 @@ snapshots:
       define-properties: 1.2.1
       es-object-atoms: 1.1.1
 
-  obsidian@1.12.2(@codemirror/state@6.5.0)(@codemirror/view@6.38.6):
+  obsidian@1.12.3(@codemirror/state@6.5.0)(@codemirror/view@6.38.6):
     dependencies:
       '@codemirror/state': 6.5.0
       '@codemirror/view': 6.38.6
@@ -7905,7 +7905,7 @@ snapshots:
     dependencies:
       mimic-fn: 2.1.0
 
-  openai@6.22.0(ws@8.19.0)(zod@4.3.6):
+  openai@6.24.0(ws@8.19.0)(zod@4.3.6):
     optionalDependencies:
       ws: 8.19.0
       zod: 4.3.6
