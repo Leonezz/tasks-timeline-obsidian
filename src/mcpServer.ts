@@ -1,6 +1,6 @@
 import http from "node:http";
 import crypto from "node:crypto";
-import { Notice, TFile } from "obsidian";
+import { Notice } from "obsidian";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -20,7 +20,7 @@ import {
 } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "./main";
 import { ObsidianTasksRepo } from "./tasksRepo";
-import { taskToMarkdown } from "./serializers";
+
 import { TOOL_ANNOTATIONS, generateResultAnnotations } from "./mcpAnnotations";
 import type { McpAuthManager } from "./mcpAuth";
 import type { StatsTracker } from "./mcpStats";
@@ -108,31 +108,7 @@ function createObsidianContext(
 				);
 			}
 
-			const vault = plugin.app.vault;
-			let file = vault.getAbstractFileByPath(targetFile);
-
-			if (!file) {
-				file = await vault.create(targetFile, "");
-			}
-
-			if (!(file instanceof TFile)) {
-				throw new Error(
-					`Cannot add task: path is not a file: ${targetFile}`,
-				);
-			}
-
-			const statusMarker = task.status === "done" ? "x" : " ";
-			const templateLine = `- [${statusMarker}] ${task.title}`;
-			const taskLine = taskToMarkdown(task, templateLine);
-
-			await vault.process(file, (content) => {
-				if (content.length > 0 && !content.endsWith("\n")) {
-					return content + "\n" + taskLine + "\n";
-				}
-				return content + taskLine + "\n";
-			});
-
-			tasksRepo.invalidateFile(targetFile);
+			await tasksRepo.addTask(task);
 		},
 
 		async updateTask(task: Task): Promise<void> {
