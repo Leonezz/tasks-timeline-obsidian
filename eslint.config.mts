@@ -42,6 +42,19 @@ export default tseslint.config(
 		},
 	},
 	...obsidianmd.configs.recommended,
+	{
+		// Node.js globals for MCP server files — must come AFTER obsidianmd.configs.recommended
+		// to override the import/no-nodejs-modules rule for files that use Node.js built-ins
+		files: ['src/mcp*.ts'],
+		languageOptions: {
+			globals: {
+				...globals.node,
+			},
+		},
+		rules: {
+			'import/no-nodejs-modules': 'off',
+		},
+	},
 	globalIgnores([
 		"node_modules",
 		"dist",
