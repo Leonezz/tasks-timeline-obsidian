@@ -8,7 +8,11 @@ import {
 import { TasksTimelineObsidianView, VIEW_TYPE } from "./view";
 import { Events, TypedBus } from "./eventbus";
 import { migrateSettings } from "./settingsMigration";
-import { migrateExistingKeysToSecretStorage } from "./secretStorage";
+import {
+	extractAndStoreSecrets,
+	migrateExistingKeysToSecretStorage,
+	resolveSecrets,
+} from "./secretStorage";
 import { ObsidianMcpServer, type SessionSummary } from "./mcpServer";
 import { McpAuthManager } from "./mcpAuth";
 import { StatsTracker, type StatsData } from "./mcpStats";
@@ -34,16 +38,11 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 		> | null;
 		const initialStats =
 			(savedData?.mcpStats as StatsData | undefined) ?? {};
-		this.statsTracker = new StatsTracker(
-			initialStats,
-			async (stats) => {
-				const data = ((await this.loadData()) as Record<
-					string,
-					unknown
-				>) ?? {};
-				await this.saveData({ ...data, mcpStats: stats });
-			},
-		);
+		this.statsTracker = new StatsTracker(initialStats, async (stats) => {
+			const data =
+				((await this.loadData()) as Record<string, unknown>) ?? {};
+			await this.saveData({ ...data, mcpStats: stats });
+		});
 
 		// Start MCP server if enabled
 		if (this.settings.mcpServer.enabled) {
@@ -133,6 +132,12 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 			this.settings._settingsVersion = CURRENT_SETTINGS_VERSION;
 			await this.saveSettings();
 		}
+
+		// Always keep secrets resolved in memory
+		this.settings.appSetting = resolveSecrets(
+			this.app,
+			this.settings.appSetting,
+		);
 	}
 
 	private async startMcpServer(): Promise<void> {
@@ -168,7 +173,15 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 	}
 
 	async saveSettings() {
-		await this.saveData(this.settings);
+		// Strip secrets for disk storage, but keep them in memory
+		const forDisk = {
+			...this.settings,
+			appSetting: extractAndStoreSecrets(
+				this.app,
+				this.settings.appSetting,
+			),
+		};
+		await this.saveData(forDisk);
 	}
 
 	// --- MCP helper methods for settings UI ---

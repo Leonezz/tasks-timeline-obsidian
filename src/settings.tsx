@@ -9,7 +9,6 @@ import {
 	SettingsPage,
 } from "@tasks-timeline/components";
 import { unmountReactRoot } from "./view";
-import { extractAndStoreSecrets, resolveSecrets } from "./secretStorage";
 import type { StatsData } from "./mcpStats";
 import type { SessionSummary } from "./mcpServer";
 
@@ -603,13 +602,9 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 		this.root.render(
 			<React.StrictMode>
 				<SettingsPageWrapper
-					initialSettings={resolveSecrets(
-						this.app,
-						this.plugin.settings.appSetting,
-					)}
+					initialSettings={this.plugin.settings.appSetting}
 					onPersistSettings={(s) => {
-						const cleaned = extractAndStoreSecrets(this.app, s);
-						this.plugin.settings.appSetting = cleaned;
+						this.plugin.settings.appSetting = s;
 						void this.plugin.saveSettings();
 						this.plugin.bus.emit("settings:changed", {});
 					}}
