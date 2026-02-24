@@ -9,29 +9,45 @@ import { TasksTimelineObsidianView, VIEW_TYPE } from "./view";
 import { Events, TypedBus } from "./eventbus";
 import { migrateSettings } from "./settingsMigration";
 import { migrateExistingKeysToSecretStorage } from "./secretStorage";
-import { ObsidianMcpServer } from "./mcpServer";
+import { ObsidianMcpServer, type SessionSummary } from "./mcpServer";
+import { McpAuthManager } from "./mcpAuth";
+import { StatsTracker, type StatsData } from "./mcpStats";
 
 export default class TasksTimelineObsidianPlugin extends Plugin {
 	settings: TasksTimelineObsidianPluginSettings;
 	themeObserver: MutationObserver;
 	bus = new TypedBus<Events>();
 	private mcpServer: ObsidianMcpServer | null = null;
+	private authManager: McpAuthManager | null = null;
+	private statsTracker: StatsTracker | null = null;
 
 	async onload() {
 		await this.loadSettings();
 
+		// Initialize auth manager
+		this.authManager = new McpAuthManager(this.app);
+
+		// Initialize stats tracker
+		const savedData = (await this.loadData()) as Record<
+			string,
+			unknown
+		> | null;
+		const initialStats =
+			(savedData?.mcpStats as StatsData | undefined) ?? {};
+		this.statsTracker = new StatsTracker(
+			initialStats,
+			async (stats) => {
+				const data = ((await this.loadData()) as Record<
+					string,
+					unknown
+				>) ?? {};
+				await this.saveData({ ...data, mcpStats: stats });
+			},
+		);
+
 		// Start MCP server if enabled
 		if (this.settings.mcpServer.enabled) {
-			this.mcpServer = new ObsidianMcpServer(this);
-			try {
-				await this.mcpServer.start();
-			} catch (error) {
-				console.error("Failed to start MCP server:", error);
-				new Notice(
-					// eslint-disable-next-line obsidianmd/ui/sentence-case
-					"MCP server failed to start. Check console for details.",
-				);
-			}
+			await this.startMcpServer();
 		}
 
 		// This creates an icon in the left ribbon.
@@ -72,6 +88,12 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 	onunload() {
 		// this.app.workspace.detachLeavesOfType(VIEW_TYPE);
 		this.themeObserver.disconnect();
+
+		// Flush stats before shutdown
+		if (this.statsTracker) {
+			void this.statsTracker.flush();
+		}
+
 		if (this.mcpServer) {
 			void this.mcpServer.stop();
 			this.mcpServer = null;
@@ -113,6 +135,27 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 		}
 	}
 
+	private async startMcpServer(): Promise<void> {
+		this.mcpServer = new ObsidianMcpServer(this);
+
+		if (this.authManager) {
+			this.mcpServer.setAuthManager(this.authManager);
+		}
+		if (this.statsTracker) {
+			this.mcpServer.setStatsTracker(this.statsTracker);
+		}
+
+		try {
+			await this.mcpServer.start();
+		} catch (error) {
+			console.error("Failed to start MCP server:", error);
+			new Notice(
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				"MCP server failed to start. Check console for details.",
+			);
+		}
+	}
+
 	async restartMcpServer(): Promise<void> {
 		if (this.mcpServer) {
 			await this.mcpServer.stop();
@@ -120,21 +163,42 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 		}
 
 		if (this.settings.mcpServer.enabled) {
-			this.mcpServer = new ObsidianMcpServer(this);
-			try {
-				await this.mcpServer.start();
-			} catch (error) {
-				console.error("Failed to start MCP server:", error);
-				new Notice(
-					// eslint-disable-next-line obsidianmd/ui/sentence-case
-					"MCP server failed to start. Check console for details.",
-				);
-			}
+			await this.startMcpServer();
 		}
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	// --- MCP helper methods for settings UI ---
+
+	async getAuthToken(): Promise<string> {
+		if (!this.authManager) {
+			this.authManager = new McpAuthManager(this.app);
+		}
+		return this.authManager.getToken();
+	}
+
+	async regenerateAuthToken(): Promise<string> {
+		if (!this.authManager) {
+			this.authManager = new McpAuthManager(this.app);
+		}
+		return this.authManager.regenerateToken();
+	}
+
+	getMcpStats(): StatsData {
+		return this.statsTracker?.getStats() ?? {};
+	}
+
+	getMcpSessionSummaries(): SessionSummary[] {
+		return this.mcpServer?.getSessionSummaries() ?? [];
+	}
+
+	updateSecurityBlacklist(blacklist: string): void {
+		if (this.mcpServer) {
+			this.mcpServer.getSecurityManager().updateRules(blacklist);
+		}
 	}
 
 	async activateView() {
