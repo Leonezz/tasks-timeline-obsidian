@@ -1,4 +1,8 @@
-import type { AIProvider, AppSettings } from "@tasks-timeline/components";
+import type {
+	AIProvider,
+	AppSettings,
+	FilterRule,
+} from "@tasks-timeline/components";
 
 /**
  * Checks if a value is a plain object (not null, not array, not Date, etc.)
@@ -100,7 +104,7 @@ export function migrateV1ToV2(appSetting: AppSettings): AppSettings {
 			const updatedProviders = Object.assign(
 				{},
 				result.aiConfig.providers,
-				{ [compatKey]: { apiKey: "", baseUrl: "", model: "" } }
+				{ [compatKey]: { apiKey: "", baseUrl: "", model: "" } },
 			) as AppSettings["aiConfig"]["providers"];
 			result = {
 				...result,
@@ -116,19 +120,58 @@ export function migrateV1ToV2(appSetting: AppSettings): AppSettings {
 }
 
 /**
+ * Converts old flat-array filter fields (string[]) to the new FilterRule shape
+ * ({ include, exclude }). Idempotent — already-migrated settings pass through unchanged.
+ */
+export function migrateFiltersToFilterRule(
+	appSetting: AppSettings,
+): AppSettings {
+	const filters = appSetting.filters;
+	if (!filters) return appSetting;
+
+	const toRule = <T>(value: unknown): FilterRule<T> | undefined => {
+		if (Array.isArray(value)) {
+			return { include: value as T[], exclude: [] };
+		}
+		return undefined;
+	};
+
+	const tags = toRule<string>(filters.tags);
+	const categories = toRule<string>(filters.categories);
+	const priorities = toRule(filters.priorities);
+	const statuses = toRule(filters.statuses);
+
+	if (!tags && !categories && !priorities && !statuses) {
+		return appSetting;
+	}
+
+	return {
+		...appSetting,
+		filters: {
+			...filters,
+			...(tags && { tags }),
+			...(categories && { categories }),
+			...(priorities && { priorities }),
+			...(statuses && { statuses }),
+		},
+	};
+}
+
+/**
  * Orchestrates settings migration: run shape migrations first (so flat fields
  * get converted to their structured equivalents), then deep-merge with defaults
  * to fill any missing keys. Idempotent — safe to call on already-migrated settings.
  */
 export function migrateSettings(
 	raw: Partial<AppSettings> | undefined,
-	defaults: AppSettings
+	defaults: AppSettings,
 ): AppSettings {
 	if (!raw) {
 		return { ...defaults };
 	}
 
 	// Migrate shape first so flat fields become structured before merging
-	const migrated = migrateV1ToV2(raw as AppSettings);
+	let migrated = migrateV1ToV2(raw as AppSettings);
+	migrated = migrateFiltersToFilterRule(migrated);
 	return deepMergeSettings(defaults, migrated as Partial<AppSettings>);
 }
