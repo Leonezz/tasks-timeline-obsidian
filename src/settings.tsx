@@ -518,6 +518,34 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 		const container = containerEl;
 		container.empty();
 
+		// Collect available categories and tags from the vault's metadata cache
+		const markdownFiles = this.app.vault.getMarkdownFiles();
+		const availableCategories = markdownFiles.map((f) => f.path).sort();
+
+		const tagSet = new Set<string>();
+		for (const file of markdownFiles) {
+			const cache = this.app.metadataCache.getFileCache(file);
+			if (cache?.tags) {
+				for (const t of cache.tags) {
+					tagSet.add(t.tag);
+				}
+			}
+			if (cache?.frontmatter) {
+				const fm = cache.frontmatter;
+				if (typeof fm["tag"] === "string") {
+					tagSet.add(
+						fm["tag"].startsWith("#") ? fm["tag"] : "#" + fm["tag"],
+					);
+				}
+				if (Array.isArray(fm["tags"])) {
+					for (const t of fm["tags"] as string[]) {
+						tagSet.add(t.startsWith("#") ? t : "#" + t);
+					}
+				}
+			}
+		}
+		const availableTags = [...tagSet].sort();
+
 		const mcpTab: CustomSettingsTab = {
 			id: "mcp-server",
 			label: "MCP Server",
@@ -583,8 +611,8 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 						void this.plugin.saveSettings();
 						this.plugin.bus.emit("settings:changed", {});
 					}}
-					availableCategories={[]}
-					availableTags={[]}
+					availableCategories={availableCategories}
+					availableTags={availableTags}
 					inDarkMode={this.plugin.settings.systemInDarkMode}
 					customTabs={[mcpTab]}
 				/>
