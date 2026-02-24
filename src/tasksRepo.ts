@@ -129,6 +129,39 @@ export class ObsidianTasksRepo implements TaskRepository {
 		return flattenedTasks;
 	}
 
+	async addTask(task: Task): Promise<void> {
+		const targetFile =
+			task.category ||
+			this.plugin.settings.appSetting.defaultCategory ||
+			"Tasks.md";
+
+		const vault = this.plugin.app.vault;
+		let file = vault.getAbstractFileByPath(targetFile);
+
+		if (!file) {
+			file = await vault.create(targetFile, "");
+		}
+
+		if (!(file instanceof TFile)) {
+			throw new Error(
+				`Cannot add task: path is not a file: ${targetFile}`,
+			);
+		}
+
+		const statusMarker = task.status === "done" ? "x" : " ";
+		const templateLine = `- [${statusMarker}] ${task.title}`;
+		const taskLine = taskToMarkdown(task, templateLine);
+
+		await vault.process(file, (content) => {
+			if (content.length > 0 && !content.endsWith("\n")) {
+				return content + "\n" + taskLine + "\n";
+			}
+			return content + taskLine + "\n";
+		});
+
+		this.invalidateFile(targetFile);
+	}
+
 	saveTasks(tasks: Task[]): Promise<void> {
 		return Promise.resolve();
 	}

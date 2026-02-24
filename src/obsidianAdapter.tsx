@@ -142,10 +142,13 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 
 	// Task CRUD handlers
 	const handleTaskAdded = async (task: Task) => {
-		// For now, we don't support adding tasks from the UI
-		// This would require creating a new markdown task in a file
-		console.debug("Task added (not implemented):", task);
-		new Notice("Adding tasks from the UI is not yet supported");
+		try {
+			await stableTasksRepo.current.addTask(task);
+			await loadTasks();
+		} catch (error) {
+			console.error("Failed to add task:", error);
+			new Notice("Failed to add task.");
+		}
 	};
 
 	const handleTaskUpdated = async (task: Task, previous: Task) => {
