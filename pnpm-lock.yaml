@@ -13,13 +13,13 @@ importers:
         version: 0.78.0(zod@4.3.6)
       '@google/genai':
         specifier: ^1.42.0
-        version: 1.42.0(@modelcontextprotocol/sdk@1.27.0(zod@4.3.6))
+        version: 1.42.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))
       '@modelcontextprotocol/sdk':
-        specifier: ^1.27.0
-        version: 1.27.0(zod@4.3.6)
+        specifier: ^1.27.1
+        version: 1.27.1(zod@4.3.6)
       '@tasks-timeline/components':
         specifier: latest
-        version: 0.2.5(@anthropic-ai/sdk@0.78.0(zod@4.3.6))(@google/genai@1.42.0(@modelcontextprotocol/sdk@1.27.0(zod@4.3.6)))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(openai@6.24.0(ws@8.19.0)(zod@4.3.6))(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        version: 0.3.0(@anthropic-ai/sdk@0.78.0(zod@4.3.6))(@google/genai@1.42.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6)))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(openai@6.25.0(ws@8.19.0)(zod@4.3.6))(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       ahooks:
         specifier: ^3.9.6
         version: 3.9.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -33,8 +33,8 @@ importers:
         specifier: latest
         version: 1.12.3(@codemirror/state@6.5.0)(@codemirror/view@6.38.6)
       openai:
-        specifier: ^6.24.0
-        version: 6.24.0(ws@8.19.0)(zod@4.3.6)
+        specifier: ^6.25.0
+        version: 6.25.0(ws@8.19.0)(zod@4.3.6)
       parsimmon:
         specifier: ^1.18.1
         version: 1.18.1
@@ -875,8 +875,8 @@ packages:
     peerDependencies:
       eslint: ^9
 
-  '@modelcontextprotocol/sdk@1.27.0':
-    resolution: {integrity: sha512-qOdO524oPMkUsOJTrsH9vz/HN3B5pKyW+9zIW51A9kDMVe7ON70drz1ouoyoyOcfzc+oxhkQ6jWmbyKnlWmYqA==}
+  '@modelcontextprotocol/sdk@1.27.1':
+    resolution: {integrity: sha512-sr6GbP+4edBwFndLbM60gf07z0FQ79gaExpnsjMGePXqFcSSb7t6iscpjk9DhFhwd+mTEQrzNafGP8/iGGFYaA==}
     engines: {node: '>=18'}
     peerDependencies:
       '@cfworker/json-schema': ^4.1.1
@@ -1419,8 +1419,8 @@ packages:
   '@sinonjs/fake-timers@13.0.5':
     resolution: {integrity: sha512-36/hTbH2uaWuGVERyC6da9YwGWnzUZXuPro/F2LfsdOsLnCojz/iSH8MxUt/FD2S5XBSVPhmArFUXcpCQ2Hkiw==}
 
-  '@tasks-timeline/components@0.2.5':
-    resolution: {integrity: sha512-3+PdxQPdJgNLQNHwri8tp9Rof0V7Ko+0g23tlPLXk0xGPzChAq8fZ2nfJiH+yPOWzatUf0vz4tC8OIys1jrPRA==}
+  '@tasks-timeline/components@0.3.0':
+    resolution: {integrity: sha512-BlEnuIyRmWN53kDNwUTGVdSDSTH00Dbu8Ycx1vZS2+5u3sOezc5QS51XgvrozIbGCCeFKdF9KgXbn9An1acefg==}
     peerDependencies:
       '@anthropic-ai/sdk': '>=0.30.0'
       '@google/genai': '>=1.0.0'
@@ -2594,8 +2594,8 @@ packages:
     resolution: {integrity: sha512-DpLKbNU4WylpxJykQujfCcwYWiV/Jhm50Goo0wrVILAv5jOr9d+H+UR3PhSCD2rCCEIg0uc+G+muBTwD54JhDQ==}
     engines: {node: '>= 0.4'}
 
-  google-auth-library@10.5.0:
-    resolution: {integrity: sha512-7ABviyMOlX5hIVD60YOfHw4/CxOfBhyduaYB+wbFWCWoni4N7SLcV46hrVRktuBbZjFC9ONyqamZITN7q3n32w==}
+  google-auth-library@10.6.1:
+    resolution: {integrity: sha512-5awwuLrzNol+pFDmKJd0dKtZ0fPLAtoA5p7YO4ODsDu6ONJUVqbYwvv8y2ZBO5MBNp9TJXigB19710kYpBPdtA==}
     engines: {node: '>=18'}
 
   google-logging-utils@1.1.3:
@@ -2611,10 +2611,6 @@ packages:
 
   graphemer@1.4.0:
     resolution: {integrity: sha512-EtKwoO6kxCL9WO5xipiHTZlSzBm7WLT627TqC/uVRd0HKmq8NXyebnNYxDoBi7wt8eTWrUrKXCOVaFq9x1kgag==}
-
-  gtoken@8.0.0:
-    resolution: {integrity: sha512-+CqsMbHPiSTdtSO14O51eMNlrp9N79gmeqmXeouJOhfucAedHw9noVe/n5uJk3tbKE6a+6ZCQg3RPhVhHByAIw==}
-    engines: {node: '>=18'}
 
   handlebars@4.7.8:
     resolution: {integrity: sha512-vafaFqs8MZkRrSX7sFVUdo3ap/eNiLnb4IakshzvP56X5Nr1iGKAIqdX6tMlm6HcNRIkr6AxO5jFEoJzzpT8aQ==}
@@ -3222,15 +3218,15 @@ packages:
     resolution: {integrity: sha512-I9jwMn07Sy/IwOj3zVkVik2JTvgpaykDZEigL6Rx6N9LbMywwUSMtxET+7lVoDLLd3O3IXwJwvuuns8UB/HeAg==}
     engines: {node: '>=4'}
 
-  minimatch@3.1.3:
-    resolution: {integrity: sha512-M2GCs7Vk83NxkUyQV1bkABc4yxgz9kILhHImZiBPAZ9ybuvCb0/H7lEl5XvIg3g+9d4eNotkZA5IWwYl0tibaA==}
+  minimatch@3.1.4:
+    resolution: {integrity: sha512-twmL+S8+7yIsE9wsqgzU3E8/LumN3M3QELrBZ20OdmQ9jB2JvW5oZtBEmft84k/Gs5CG9mqtWc6Y9vW+JEzGxw==}
 
-  minimatch@8.0.5:
-    resolution: {integrity: sha512-85MramurFFFSes0exAhJjto4tC4MpGWoktMZl+GYYBPwdpITzZmTKDJDrxhzg2bOyXGIPxlWvGl39tCcQBkuKA==}
+  minimatch@8.0.6:
+    resolution: {integrity: sha512-JVNTX5Qc03lB0PuFDuUcVTbi8u5kKchLXDYEnLJrOosZW8cqamFiyItG/7cn0QEt7XmeFHSLJRYg4KujJKuqlw==}
     engines: {node: '>=16 || 14 >=14.17'}
 
-  minimatch@9.0.6:
-    resolution: {integrity: sha512-kQAVowdR33euIqeA0+VZTDqU+qo1IeVY+hrKYtZMio3Pg0P0vuh/kwRylLUddJhB6pf3q/botcOvRtx4IN1wqQ==}
+  minimatch@9.0.7:
+    resolution: {integrity: sha512-MOwgjc8tfrpn5QQEvjijjmDVtMw2oL88ugTevzxQnzRLm6l3fVEF2gzU0kYeYYKD8C66+IdGX6peJ4MyUlUnPg==}
     engines: {node: '>=16 || 14 >=14.17'}
 
   minimist@1.2.8:
@@ -3360,8 +3356,8 @@ packages:
     resolution: {integrity: sha512-kbpaSSGJTWdAY5KPVeMOKXSrPtr8C8C7wodJbcsd51jRnmD+GZu8Y0VoU6Dm5Z4vWr0Ig/1NKuWRKf7j5aaYSg==}
     engines: {node: '>=6'}
 
-  openai@6.24.0:
-    resolution: {integrity: sha512-WLR+qki3S4c9ZHilR42GDTxEpTrMFeWfcFNg1RMELW0ZCCBJMDDlqVV+QQEM5KN2hjUyZu45QpgJmln/0ykFRg==}
+  openai@6.25.0:
+    resolution: {integrity: sha512-mEh6VZ2ds2AGGokWARo18aPISI1OhlgdEIC1ewhkZr8pSIT31dec0ecr9Nhxx0JlybyOgoAT1sWeKtwPZzJyww==}
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
@@ -4682,7 +4678,7 @@ snapshots:
     dependencies:
       '@eslint/object-schema': 2.1.7
       debug: 4.4.3
-      minimatch: 3.1.3
+      minimatch: 3.1.4
     transitivePeerDependencies:
       - supports-color
 
@@ -4703,7 +4699,7 @@ snapshots:
       ignore: 5.3.2
       import-fresh: 3.3.1
       js-yaml: 4.1.1
-      minimatch: 3.1.3
+      minimatch: 3.1.4
       strip-json-comments: 3.1.1
     transitivePeerDependencies:
       - supports-color
@@ -4743,14 +4739,14 @@ snapshots:
 
   '@floating-ui/utils@0.2.10': {}
 
-  '@google/genai@1.42.0(@modelcontextprotocol/sdk@1.27.0(zod@4.3.6))':
+  '@google/genai@1.42.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))':
     dependencies:
-      google-auth-library: 10.5.0
+      google-auth-library: 10.6.1
       p-retry: 4.6.2
       protobufjs: 7.5.4
       ws: 8.19.0
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.27.0(zod@4.3.6)
+      '@modelcontextprotocol/sdk': 1.27.1(zod@4.3.6)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -5010,7 +5006,7 @@ snapshots:
       eslint-plugin-react: 7.37.3(eslint@9.39.3(jiti@2.6.1))
       eslint-plugin-security: 1.4.0
 
-  '@modelcontextprotocol/sdk@1.27.0(zod@4.3.6)':
+  '@modelcontextprotocol/sdk@1.27.1(zod@4.3.6)':
     dependencies:
       '@hono/node-server': 1.19.9(hono@4.12.2)
       ajv: 8.18.0
@@ -5495,7 +5491,7 @@ snapshots:
     dependencies:
       '@sinonjs/commons': 3.0.1
 
-  '@tasks-timeline/components@0.2.5(@anthropic-ai/sdk@0.78.0(zod@4.3.6))(@google/genai@1.42.0(@modelcontextprotocol/sdk@1.27.0(zod@4.3.6)))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(openai@6.24.0(ws@8.19.0)(zod@4.3.6))(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@tasks-timeline/components@0.3.0(@anthropic-ai/sdk@0.78.0(zod@4.3.6))(@google/genai@1.42.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6)))(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(openai@6.25.0(ws@8.19.0)(zod@4.3.6))(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
       '@radix-ui/react-collapsible': 1.1.12(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@radix-ui/react-dialog': 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -5520,8 +5516,8 @@ snapshots:
       tailwind-merge: 3.5.0
     optionalDependencies:
       '@anthropic-ai/sdk': 0.78.0(zod@4.3.6)
-      '@google/genai': 1.42.0(@modelcontextprotocol/sdk@1.27.0(zod@4.3.6))
-      openai: 6.24.0(ws@8.19.0)(zod@4.3.6)
+      '@google/genai': 1.42.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))
+      openai: 6.25.0(ws@8.19.0)(zod@4.3.6)
     transitivePeerDependencies:
       - '@emotion/is-prop-valid'
       - '@types/react'
@@ -5731,7 +5727,7 @@ snapshots:
       debug: 4.4.3
       fast-glob: 3.3.3
       is-glob: 4.0.3
-      minimatch: 9.0.6
+      minimatch: 9.0.7
       semver: 7.7.4
       ts-api-utils: 2.4.0(typescript@5.9.3)
       typescript: 5.9.3
@@ -6509,7 +6505,7 @@ snapshots:
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3
-      minimatch: 3.1.3
+      minimatch: 3.1.4
       object.fromentries: 2.0.8
       object.groupby: 1.0.3
       object.values: 1.2.1
@@ -6532,7 +6528,7 @@ snapshots:
       eslint-compat-utils: 0.5.1(eslint@9.39.3(jiti@2.6.1))
       json-schema-migrate: 2.0.0
       jsonc-eslint-parser: 2.4.2
-      minimatch: 8.0.5
+      minimatch: 8.0.6
       synckit: 0.9.3
       toml-eslint-parser: 0.9.3
       tunnel-agent: 0.6.0
@@ -6549,7 +6545,7 @@ snapshots:
       get-tsconfig: 4.13.6
       globals: 15.15.0
       ignore: 5.3.2
-      minimatch: 9.0.6
+      minimatch: 9.0.7
       semver: 7.7.4
 
   eslint-plugin-obsidianmd@0.1.9(@eslint/js@9.30.1)(@eslint/json@0.14.0)(@typescript-eslint/parser@8.35.1(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.3(jiti@2.6.1))(obsidian@1.12.3(@codemirror/state@6.5.0)(@codemirror/view@6.38.6))(typescript-eslint@8.35.1(eslint@9.39.3(jiti@2.6.1))(typescript@5.9.3)):
@@ -6586,7 +6582,7 @@ snapshots:
       estraverse: 5.3.0
       hasown: 2.0.2
       jsx-ast-utils: 3.3.5
-      minimatch: 3.1.3
+      minimatch: 3.1.4
       object.entries: 1.1.9
       object.fromentries: 2.0.8
       object.values: 1.2.1
@@ -6646,7 +6642,7 @@ snapshots:
       is-glob: 4.0.3
       json-stable-stringify-without-jsonify: 1.0.1
       lodash.merge: 4.6.2
-      minimatch: 3.1.3
+      minimatch: 3.1.4
       natural-compare: 1.4.0
       optionator: 0.9.4
     optionalDependencies:
@@ -6935,7 +6931,7 @@ snapshots:
     dependencies:
       foreground-child: 3.3.1
       jackspeak: 3.4.3
-      minimatch: 9.0.6
+      minimatch: 9.0.7
       minipass: 7.1.3
       package-json-from-dist: 1.0.1
       path-scurry: 1.11.1
@@ -6945,7 +6941,7 @@ snapshots:
       fs.realpath: 1.0.0
       inflight: 1.0.6
       inherits: 2.0.4
-      minimatch: 3.1.3
+      minimatch: 3.1.4
       once: 1.4.0
       path-is-absolute: 1.0.1
 
@@ -6958,14 +6954,13 @@ snapshots:
       define-properties: 1.2.1
       gopd: 1.2.0
 
-  google-auth-library@10.5.0:
+  google-auth-library@10.6.1:
     dependencies:
       base64-js: 1.5.1
       ecdsa-sig-formatter: 1.0.11
       gaxios: 7.1.3
       gcp-metadata: 8.1.2
       google-logging-utils: 1.1.3
-      gtoken: 8.0.0
       jws: 4.0.1
     transitivePeerDependencies:
       - supports-color
@@ -6977,13 +6972,6 @@ snapshots:
   graceful-fs@4.2.11: {}
 
   graphemer@1.4.0: {}
-
-  gtoken@8.0.0:
-    dependencies:
-      gaxios: 7.1.3
-      jws: 4.0.1
-    transitivePeerDependencies:
-      - supports-color
 
   handlebars@4.7.8:
     dependencies:
@@ -7774,15 +7762,15 @@ snapshots:
 
   min-indent@1.0.1: {}
 
-  minimatch@3.1.3:
+  minimatch@3.1.4:
     dependencies:
       brace-expansion: 1.1.12
 
-  minimatch@8.0.5:
+  minimatch@8.0.6:
     dependencies:
       brace-expansion: 2.0.2
 
-  minimatch@9.0.6:
+  minimatch@9.0.7:
     dependencies:
       brace-expansion: 5.0.3
 
@@ -7905,7 +7893,7 @@ snapshots:
     dependencies:
       mimic-fn: 2.1.0
 
-  openai@6.24.0(ws@8.19.0)(zod@4.3.6):
+  openai@6.25.0(ws@8.19.0)(zod@4.3.6):
     optionalDependencies:
       ws: 8.19.0
       zod: 4.3.6
@@ -8508,7 +8496,7 @@ snapshots:
     dependencies:
       '@istanbuljs/schema': 0.1.3
       glob: 7.2.3
-      minimatch: 3.1.3
+      minimatch: 3.1.4
 
   tinyglobby@0.2.15:
     dependencies:
