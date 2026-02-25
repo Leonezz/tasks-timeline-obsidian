@@ -1,7 +1,7 @@
 {
 	"id": "tasks-timeline-obsidian",
 	"name": "Tasks Timeline Obsidian",
-	"version": "0.1.5",
+	"version": "0.1.6",
 	"minAppVersion": "0.15.0",
 	"description": "This is a timeline style viewer for your tasks",
 	"author": "zhuwenq <zhuwenqa@outlook.com>",
