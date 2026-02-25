@@ -513,6 +513,7 @@ export class ObsidianMcpServer {
 	}
 
 	async start(): Promise<void> {
+		const host = this.plugin.settings.mcpServer.host ?? "127.0.0.1";
 		const port = this.plugin.settings.mcpServer.port;
 
 		if (port < 1024 || port > 65535) {
@@ -632,11 +633,11 @@ export class ObsidianMcpServer {
 				reject(err);
 			});
 
-			this.httpServer!.listen(port, "127.0.0.1", () => {
+			this.httpServer!.listen(port, host, () => {
 				console.debug(
-					`MCP server listening on http://127.0.0.1:${port}/mcp`,
+					`MCP server listening on http://${host}:${port}/mcp`,
 				);
-				new Notice(`MCP server started on port ${port}`);
+				new Notice(`MCP server started on ${host}:${port}`);
 				resolve();
 			});
 		});

@@ -18,6 +18,7 @@ export interface TasksTimelinePluginSettings {
 	_settingsVersion?: number;
 	mcpServer: {
 		enabled: boolean;
+		host: string;
 		port: number;
 		authEnabled: boolean;
 		blacklist: string;
@@ -103,6 +104,7 @@ export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 	_settingsVersion: CURRENT_SETTINGS_VERSION,
 	mcpServer: {
 		enabled: false,
+		host: "127.0.0.1",
 		port: 27182,
 		authEnabled: true,
 		blacklist: "",
@@ -179,11 +181,13 @@ function ToggleSwitch({
 
 function McpServerSettings({
 	enabled: initialEnabled,
+	host: initialHost,
 	port: initialPort,
 	authEnabled: initialAuthEnabled,
 	blacklist: initialBlacklist,
 	subscriptionsEnabled: initialSubscriptionsEnabled,
 	onToggle,
+	onHostChange,
 	onPortChange,
 	onAuthToggle,
 	onBlacklistChange,
@@ -194,11 +198,13 @@ function McpServerSettings({
 	getSessionSummaries,
 }: {
 	enabled: boolean;
+	host: string;
 	port: number;
 	authEnabled: boolean;
 	blacklist: string;
 	subscriptionsEnabled: boolean;
 	onToggle: (value: boolean) => Promise<void>;
+	onHostChange: (host: string) => Promise<void>;
 	onPortChange: (port: number) => Promise<void>;
 	onAuthToggle: (value: boolean) => Promise<void>;
 	onBlacklistChange: (value: string) => Promise<void>;
@@ -209,6 +215,7 @@ function McpServerSettings({
 	getSessionSummaries: () => SessionSummary[];
 }) {
 	const [enabled, setEnabled] = useState(initialEnabled);
+	const [host, setHost] = useState(initialHost);
 	const [port, setPort] = useState(String(initialPort));
 	const [portError, setPortError] = useState("");
 	const [authEnabled, setAuthEnabled] = useState(initialAuthEnabled);
@@ -241,6 +248,12 @@ function McpServerSettings({
 		const next = !enabled;
 		setEnabled(next);
 		void onToggle(next);
+	};
+
+	const handleHostChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+		const value = e.target.value;
+		setHost(value);
+		void onHostChange(value);
 	};
 
 	const handlePortChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -315,28 +328,51 @@ function McpServerSettings({
 						/>
 					</div>
 
-					<div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-						<label className="text-xs font-medium text-slate-500 block mb-2">
-							Port
-						</label>
-						<input
-							type="number"
-							value={port}
-							onChange={handlePortChange}
-							placeholder="27182"
-							min={1024}
-							max={65535}
-							className="w-28 px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500"
-						/>
-						<p className="text-[10px] text-slate-400 mt-1 pl-1">
-							Range: 1024-65535. Toggle off and on to apply
-							changes.
-						</p>
-						{portError && (
-							<p className="text-[10px] text-red-500 mt-1 pl-1">
-								{portError}
+					<div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-4">
+						<div>
+							<label className="text-xs font-medium text-slate-500 block mb-2">
+								Host
+							</label>
+							<select
+								value={host}
+								onChange={handleHostChange}
+								className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500"
+							>
+								<option value="127.0.0.1">
+									127.0.0.1 (localhost only)
+								</option>
+								<option value="0.0.0.0">
+									0.0.0.0 (all interfaces)
+								</option>
+							</select>
+							<p className="text-[10px] text-slate-400 mt-1 pl-1">
+								Use 0.0.0.0 to allow connections from remote AI
+								agents on the local network.
 							</p>
-						)}
+						</div>
+						<div>
+							<label className="text-xs font-medium text-slate-500 block mb-2">
+								Port
+							</label>
+							<input
+								type="number"
+								value={port}
+								onChange={handlePortChange}
+								placeholder="27182"
+								min={1024}
+								max={65535}
+								className="w-28 px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500"
+							/>
+							<p className="text-[10px] text-slate-400 mt-1 pl-1">
+								Range: 1024-65535. Toggle off and on to apply
+								changes.
+							</p>
+							{portError && (
+								<p className="text-[10px] text-red-500 mt-1 pl-1">
+									{portError}
+								</p>
+							)}
+						</div>
 					</div>
 				</div>
 			</section>
@@ -554,6 +590,7 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 			content: (
 				<McpServerSettings
 					enabled={this.plugin.settings.mcpServer.enabled}
+					host={this.plugin.settings.mcpServer.host ?? "127.0.0.1"}
 					port={this.plugin.settings.mcpServer.port}
 					authEnabled={
 						this.plugin.settings.mcpServer.authEnabled ?? true
@@ -567,6 +604,10 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 						this.plugin.settings.mcpServer.enabled = value;
 						await this.plugin.saveSettings();
 						await this.plugin.restartMcpServer();
+					}}
+					onHostChange={async (host) => {
+						this.plugin.settings.mcpServer.host = host;
+						await this.plugin.saveSettings();
 					}}
 					onPortChange={async (port) => {
 						this.plugin.settings.mcpServer.port = port;
