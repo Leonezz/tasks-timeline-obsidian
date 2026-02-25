@@ -1,7 +1,7 @@
 import { TasksPrioritySymbolToLabel } from "./symbols";
 
 export class TaskRegularExpressions {
-	public static readonly dateFormat = "yyyy-mm-dd";
+	public static readonly dateFormat = "yyyy-MM-dd";
 
 	// Matches indentation before a list marker (including > for potentially nested blockquotes or Obsidian callouts)
 	public static readonly indentationRegex = /^([\s\t>]*)/;
@@ -26,7 +26,7 @@ export class TaskRegularExpressions {
 			" +" +
 			TaskRegularExpressions.checkboxRegex.source +
 			TaskRegularExpressions.afterCheckboxRegex.source,
-		"u"
+		"u",
 	);
 
 	// Used with the "Create or Edit Task" command to parse indentation and status if present
@@ -37,13 +37,13 @@ export class TaskRegularExpressions {
 			TaskRegularExpressions.checkboxRegex.source +
 			")?" +
 			TaskRegularExpressions.afterCheckboxRegex.source,
-		"u"
+		"u",
 	);
 
 	// Used with "Toggle Done" command to detect a list item that can get a checkbox added to it.
 	public static readonly listItemRegex = new RegExp(
 		TaskRegularExpressions.indentationRegex.source +
-			TaskRegularExpressions.listMarkerRegex.source
+			TaskRegularExpressions.listMarkerRegex.source,
 	);
 
 	// Match on block link at end.
@@ -57,7 +57,7 @@ export class TaskRegularExpressions {
 				.filter((s) => s.length > 0)
 				.join("") +
 			"])$",
-		"u"
+		"u",
 	);
 
 	public static readonly startDateRegex = /🛫 *(\d{4}-\d{2}-\d{2})/u;
@@ -98,6 +98,6 @@ export class TaskRegularExpressions {
 	// matches: #dog, #car, #house
 	public static readonly hashTags = /(^|\s)#[^ !@#$%^&*(),.?":{}|<>]*/g;
 	public static readonly hashTagsFromEnd = new RegExp(
-		this.hashTags.source + "$"
+		this.hashTags.source + "$",
 	);
 }
