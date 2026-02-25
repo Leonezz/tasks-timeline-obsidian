@@ -152,11 +152,17 @@ export class ObsidianTasksRepo implements TaskRepository {
 		const templateLine = `- [${statusMarker}] ${task.title}`;
 		const taskLine = taskToMarkdown(task, templateLine);
 
+		const descriptionLine = task.description?.trim()
+			? "\t" + task.description.trim().replace(/\n/g, "\n\t")
+			: "";
+
 		await vault.process(file, (content) => {
+			const block =
+				taskLine + (descriptionLine ? "\n" + descriptionLine : "");
 			if (content.length > 0 && !content.endsWith("\n")) {
-				return content + "\n" + taskLine + "\n";
+				return content + "\n" + block + "\n";
 			}
-			return content + taskLine + "\n";
+			return content + block + "\n";
 		});
 
 		this.invalidateFile(targetFile);

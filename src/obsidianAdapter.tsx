@@ -109,33 +109,57 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 		});
 	}, [plugin, settingsRepo]);
 
-	// Listen to vault changes
+	// Listen to vault changes via metadataCache resolved event.
+	// This fires after Obsidian has re-indexed a file's metadata,
+	// ensuring listItems are up-to-date when we reload tasks.
 	useEffect(() => {
-		// Debounced reload function (trailing edge to batch rapid changes)
 		const reload = debounce(
 			() => {
+				console.debug(
+					"[TasksTimeline] reload triggered, loading tasks…",
+				);
 				void loadTasks();
 			},
-			1000,
+			500,
 			false,
 		);
 
-		const eventRef = plugin.app.vault.on("modify", (file) => {
-			// Optimization: only reload if it's a markdown file
+		const resolvedRef = plugin.app.metadataCache.on("resolved", () => {
+			console.debug("[TasksTimeline] metadataCache resolved");
+			reload();
+		});
+
+		const deleteRef = plugin.app.vault.on("delete", (file) => {
 			if (file.name.endsWith(".md")) {
+				console.debug("[TasksTimeline] vault delete:", file.path);
+				stableTasksRepo.current.invalidateFile(file.path);
+				reload();
+			}
+		});
+		const renameRef = plugin.app.vault.on("rename", (file) => {
+			if (file.name.endsWith(".md")) {
+				console.debug("[TasksTimeline] vault rename:", file.path);
 				stableTasksRepo.current.invalidateFile(file.path);
 				reload();
 			}
 		});
 
-		// Also listen for delete/rename
-		const deleteRef = plugin.app.vault.on("delete", reload);
-		const renameRef = plugin.app.vault.on("rename", reload);
+		// Also invalidate file cache when vault modifies a file
+		const modifyRef = plugin.app.vault.on("modify", (file) => {
+			if (file.name.endsWith(".md")) {
+				console.debug(
+					"[TasksTimeline] vault modify (invalidate cache):",
+					file.path,
+				);
+				stableTasksRepo.current.invalidateFile(file.path);
+			}
+		});
 
 		return () => {
-			plugin.app.vault.offref(eventRef);
+			plugin.app.metadataCache.offref(resolvedRef);
 			plugin.app.vault.offref(deleteRef);
 			plugin.app.vault.offref(renameRef);
+			plugin.app.vault.offref(modifyRef);
 			reload.cancel();
 		};
 	}, [plugin]);
@@ -144,7 +168,9 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 	const handleTaskAdded = async (task: Task) => {
 		try {
 			await stableTasksRepo.current.addTask(task);
-			await loadTasks();
+			// Don't call loadTasks() here — vault.process() triggers a "modify"
+			// event that invalidates the file cache, followed by a metadataCache
+			// "resolved" event that reloads tasks with fresh metadata.
 		} catch (error) {
 			console.error("Failed to add task:", error);
 			new Notice("Failed to add task.");

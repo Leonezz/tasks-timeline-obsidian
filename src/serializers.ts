@@ -1,8 +1,5 @@
 import { Task, TaskStatus } from "@tasks-timeline/components";
-import {
-	MdMarkerToTaskStatus,
-	TasksPrioritySymbolToLabel,
-} from "./symbols";
+import { MdMarkerToTaskStatus, TasksPrioritySymbolToLabel } from "./symbols";
 import { TaskRegularExpressions } from "./tasksRegex";
 
 /**
@@ -13,7 +10,7 @@ import { TaskRegularExpressions } from "./tasksRegex";
 const statusToMarkerChar = (status: TaskStatus): string => {
 	// Try to find the marker in the MdMarkerToTaskStatus map
 	const entry = Object.entries(MdMarkerToTaskStatus).find(
-		([_, s]) => s === status
+		([_, s]) => s === status,
 	);
 	if (entry) {
 		return entry[0];
@@ -54,7 +51,7 @@ export const taskToMarkdown = (task: Task, originalLine: string): string => {
 		if (currentStatusChar !== newStatusChar) {
 			newLine = newLine.replace(
 				TaskRegularExpressions.checkboxRegex,
-				`[${newStatusChar}]`
+				`[${newStatusChar}]`,
 			);
 		}
 	}
@@ -91,7 +88,7 @@ export const taskToMarkdown = (task: Task, originalLine: string): string => {
 		// 1. It is NOT in frontmatterTags.
 		// 2. OR it IS in frontmatterTags, BUT it matches an inline tag in the original line.
 		const tagsToAppend = task.tags
-			.map((t) => t.name)
+			.map((t) => (t.name.startsWith("#") ? t.name : "#" + t.name))
 			.filter((tagName) => {
 				const isFrontmatter = frontmatterTags.includes(tagName);
 				if (!isFrontmatter) return true;
@@ -106,20 +103,21 @@ export const taskToMarkdown = (task: Task, originalLine: string): string => {
 	// 3. Append Priority
 	if (task.priority !== "medium") {
 		const symbol = Object.entries(TasksPrioritySymbolToLabel).find(
-			([sym, label]) => label === task.priority && sym !== ""
+			([sym, label]) => label === task.priority && sym !== "",
 		);
 		if (symbol) {
 			body += " " + symbol[0];
 		}
 	}
 
-	// 4. Append Dates
-	if (task.dueAt) body += ` 📅 ${task.dueAt}`;
-	if (task.startAt) body += ` 🛫 ${task.startAt}`; // Assuming 🛫 is start
-	if (task.extra && task.extra["scheduledAt"])
-		body += ` ⏳ ${task.extra["scheduledAt"]}`;
-	if (task.createdAt) body += ` ➕ ${task.createdAt}`;
-	if (task.completedAt) body += ` ✅ ${task.completedAt}`;
+	// 4. Append Dates (truncate to YYYY-MM-DD for Tasks plugin format)
+	const dateOnly = (iso: string) => iso.slice(0, 10);
+	if (task.dueAt) body += ` 📅 ${dateOnly(task.dueAt)}`;
+	if (task.startAt) body += ` 🛫 ${dateOnly(task.startAt)}`;
+	if (task.extra?.["scheduledAt"])
+		body += ` ⏳ ${dateOnly(task.extra["scheduledAt"])}`;
+	if (task.createdAt) body += ` ➕ ${dateOnly(task.createdAt)}`;
+	if (task.completedAt) body += ` ✅ ${dateOnly(task.completedAt)}`;
 
 	// 5. Recurrence
 	if (task.recurringInterval) {
@@ -129,7 +127,7 @@ export const taskToMarkdown = (task: Task, originalLine: string): string => {
 	// 6. Block Link
 	// Check if original line had a block link
 	const blockLinkMatch = originalLine.match(
-		TaskRegularExpressions.blockLinkRegex
+		TaskRegularExpressions.blockLinkRegex,
 	);
 	if (blockLinkMatch) {
 		body += blockLinkMatch[0];
