@@ -1,6 +1,6 @@
 {
 	"name": "tasks-timeline-obsidian",
-	"version": "0.1.7",
+	"version": "0.1.8",
 	"description": "This is a timeline style viewer for your tasks",
 	"main": "src/main.ts",
 	"type": "module",
@@ -47,7 +47,7 @@
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@google/genai": "^1.42.0",
 		"@modelcontextprotocol/sdk": "^1.27.1",
-		"@tasks-timeline/components": "latest",
+		"@tasks-timeline/components": "0.4.0",
 		"ahooks": "^3.9.6",
 		"emoji-regex": "^10.6.0",
 		"luxon": "^3.7.2",
