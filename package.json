@@ -47,7 +47,7 @@
 		"@anthropic-ai/sdk": "^0.78.0",
 		"@google/genai": "^1.42.0",
 		"@modelcontextprotocol/sdk": "^1.27.1",
-		"@tasks-timeline/components": "0.4.0",
+		"@tasks-timeline/components": "0.4.2",
 		"ahooks": "^3.9.6",
 		"emoji-regex": "^10.6.0",
 		"luxon": "^3.7.2",
