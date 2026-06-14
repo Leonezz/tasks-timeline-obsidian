@@ -1,11 +1,22 @@
-import { Task, TasksTimelineApp } from "@tasks-timeline/components";
+import {
+	Task,
+	TasksTimelineApp,
+	type VoiceRuntime,
+} from "@tasks-timeline/components";
 import { Events } from "eventbus";
 import TasksTimelineObsidianPlugin from "main";
-import { startTransition, useEffect, useMemo, useRef, useState } from "react";
+import {
+	startTransition,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { ObsidianSettingRepo } from "./settingsRepo";
 import { ObsidianTasksRepo } from "./tasksRepo";
 import { createRenderTitle } from "./titleRenderer";
-import { App, debounce, Notice, Pos, TFile } from "obsidian";
+import { App, debounce, Notice, Pos, requestUrl, TFile } from "obsidian";
+import { getActiveWindow } from "./obsidianDom";
 
 interface ObsidianAdaptorProps {
 	plugin: TasksTimelineObsidianPlugin;
@@ -72,6 +83,26 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 		() => new ObsidianSettingRepo(plugin),
 	);
 	const renderTitle = useMemo(() => createRenderTitle(plugin.app), [plugin]);
+	const voiceRuntime = useMemo<VoiceRuntime>(
+		() => ({
+			win: getActiveWindow(plugin.app),
+			request: async (request) => {
+				const response = await requestUrl({
+					url: request.url,
+					method: request.method,
+					headers: request.headers,
+					contentType: request.contentType,
+					body: request.body,
+					throw: false,
+				});
+				return {
+					status: response.status,
+					text: response.text,
+				};
+			},
+		}),
+		[plugin.app],
+	);
 
 	// Load tasks on mount and when refreshToken changes
 	const loadTasks = async () => {
@@ -223,6 +254,7 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			onItemClick={(item) => handleItemClick(item, plugin.app)}
 			renderTitle={renderTitle}
 			aiSystemPrompt="In this Obsidian vault, each task's category is derived from the path of the note file it belongs to. When reasoning about tasks, treat the category as the file-level topic or project the task is part of."
+			voiceRuntime={voiceRuntime}
 		/>
 	);
 };
