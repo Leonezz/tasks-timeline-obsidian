@@ -24,8 +24,8 @@ importers:
         specifier: ^1.27.1
         version: 1.27.1(zod@4.3.6)
       '@tasks-timeline/components':
-        specifier: 0.4.13
-        version: 0.4.13(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@4.3.6)
+        specifier: 0.4.14
+        version: 0.4.14(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@4.3.6)
       emoji-regex:
         specifier: ^10.6.0
         version: 10.6.0
@@ -1416,8 +1416,8 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@tasks-timeline/components@0.4.13':
-    resolution: {integrity: sha512-aqpJBH0CCpTuPZIGoPTNy5nbYzkR/e53q0/YYWeoUObhogriAgV1ptVacOdtcfw1TFbmmz7+sQ0iF+/PN7Z4AQ==}
+  '@tasks-timeline/components@0.4.14':
+    resolution: {integrity: sha512-VmO8svO6N3YhDjIVlIGxngLWKG0qpBi5KfUY3w/k4geT9Ry/462rBCHvHZjIKe1isSC2UR/BKLSxJOkwQ5t+DQ==}
     peerDependencies:
       react: ^19.2.3
       react-dom: ^19.2.3
@@ -5335,7 +5335,7 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@tasks-timeline/components@0.4.13(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@4.3.6)':
+  '@tasks-timeline/components@0.4.14(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(prop-types@15.8.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@4.3.6)':
     dependencies:
       '@ai-sdk/anthropic': 3.0.84(zod@4.3.6)
       '@ai-sdk/google': 3.0.82(zod@4.3.6)
