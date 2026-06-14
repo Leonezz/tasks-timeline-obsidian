@@ -28,7 +28,7 @@ jobs:
               run: pnpm install --frozen-lockfile
 
             - name: Verify release tag
-              run: node -e 'const fs=require("fs"); const manifest=JSON.parse(fs.readFileSync("manifest.json","utf8")); const tag=process.env.GITHUB_REF_NAME; if (tag !== "v" + manifest.version) { throw new Error("Release tag " + tag + " does not match manifest version v" + manifest.version); }'
+              run: node -e 'const fs=require("fs"); const manifest=JSON.parse(fs.readFileSync("manifest.json","utf8")); const tag=process.env.GITHUB_REF_NAME; if (tag !== manifest.version) { throw new Error("Release tag " + tag + " does not match manifest version " + manifest.version); }'
 
             - name: Build
               run: pnpm build
