@@ -38,6 +38,7 @@ const defaultAppSetting: AppSettings = {
 	},
 	defaultFocusMode: true,
 	totalTokenUsage: 0,
+	tokenUsageByModel: {},
 	defaultCategory: "",
 	filters: {
 		tags: [],
@@ -212,5 +213,16 @@ describe("migrateSettings", () => {
 		);
 		expect(result.voiceConfig).toBeDefined();
 		expect(result.aiConfig.providers["openai-compatible"]).toBeDefined();
+		expect(result.tokenUsageByModel).toEqual({});
+	});
+
+	it("fills token usage by model for legacy settings", () => {
+		const legacyRaw = { ...defaultAppSetting };
+		delete (legacyRaw as Partial<AppSettings>).tokenUsageByModel;
+
+		const result = migrateSettings(legacyRaw, defaultAppSetting);
+
+		expect(result.totalTokenUsage).toBe(0);
+		expect(result.tokenUsageByModel).toEqual({});
 	});
 });

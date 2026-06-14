@@ -28,7 +28,7 @@ export interface TasksTimelinePluginSettings {
 	};
 }
 
-export const CURRENT_SETTINGS_VERSION = 3;
+export const CURRENT_SETTINGS_VERSION = 4;
 
 export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 	appSetting: {
@@ -87,6 +87,7 @@ export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 		},
 		defaultFocusMode: true,
 		totalTokenUsage: 0,
+		tokenUsageByModel: {},
 		defaultCategory: "",
 		filters: {
 			tags: { include: [], exclude: [] },
