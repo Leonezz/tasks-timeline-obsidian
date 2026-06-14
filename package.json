@@ -53,7 +53,7 @@
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.27.1",
-		"@tasks-timeline/components": "0.4.6",
+		"@tasks-timeline/components": "0.4.9",
 		"emoji-regex": "^10.6.0",
 		"luxon": "^3.7.2",
 		"parsimmon": "^1.18.1",
