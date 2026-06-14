@@ -358,7 +358,7 @@ Potential additions to consider:
 - [Jest Documentation](https://jestjs.io/docs/getting-started)
 - [Testing Library](https://testing-library.com/)
 - [Obsidian Testing Guide](https://publish.obsidian.md/hub/04+-+Guides,+Workflows,+&+Courses/Guides/How+to+add+automated+tests+to+your+plugin)
-- [Research Notes](./README.test.md) - Background research on testing approaches
+- [Research Notes](./docs/TESTING.md) - Background research on testing approaches
 
 ## Summary
 

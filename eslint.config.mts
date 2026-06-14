@@ -56,6 +56,9 @@ export default tseslint.config(
 		},
 	},
 	globalIgnores([
+		".agents/**",
+		".claude/**",
+		".codex/**",
 		"node_modules",
 		"dist",
 		"esbuild.config.mjs",
@@ -64,6 +67,7 @@ export default tseslint.config(
 		"versions.json",
 		"main.js",
 		"ExampleVault/**",
+		"obsidian-plugin-dev-skill/**",
 		"package.json",
 		"vite.config.ts",
 		"tests/**",

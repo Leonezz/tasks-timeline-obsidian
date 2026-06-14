@@ -1,9 +1,9 @@
 {
-	"id": "tasks-timeline-obsidian",
-	"name": "Tasks Timeline Obsidian",
+	"id": "tasks-timeline",
+	"name": "Tasks Timeline",
 	"version": "0.2.0",
 	"minAppVersion": "0.15.0",
-	"description": "This is a timeline style viewer for your tasks",
+	"description": "View and manage vault tasks on a timeline.",
 	"author": "zhuwenq <zhuwenqa@outlook.com>",
 	"authorUrl": "https://github.com/Leonezz",
 	"fundingUrl": {
@@ -12,5 +12,5 @@
 		"Patreon": "https://patreon.com/zhuwenq",
 		"Paypal": "https://www.paypal.com/paypalme/zhuwenq"
 	},
-	"isDesktopOnly": false
+	"isDesktopOnly": true
 }

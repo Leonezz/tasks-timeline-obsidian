@@ -25,12 +25,12 @@ export class SecurityManager {
 		const lines = blacklist.split("\n");
 		for (const raw of lines) {
 			const line = raw.trim();
-			if (!line || (line.startsWith("#") && !line.startsWith("#"))) {
+			if (!line || line.startsWith("#")) {
 				continue;
 			}
 
 			if (line.startsWith("path:")) {
-				const prefix = line.slice(5).trim();
+				const prefix = this.normalizePath(line.slice(5).trim());
 				if (prefix) {
 					pathPrefixes.push(prefix);
 				}
@@ -50,9 +50,17 @@ export class SecurityManager {
 	 * Returns true if the file path is NOT blocked by any path prefix rule.
 	 */
 	isPathAllowed(filePath: string): boolean {
-		return !this.rules.pathPrefixes.some((prefix) =>
-			filePath.startsWith(prefix),
-		);
+		const path = this.normalizePath(filePath);
+		return !this.rules.pathPrefixes.some((prefix) => {
+			const normalizedPrefix = this.normalizePath(prefix).replace(
+				/\/+$/,
+				"",
+			);
+			return (
+				path === normalizedPrefix ||
+				path.startsWith(`${normalizedPrefix}/`)
+			);
+		});
 	}
 
 	/**
@@ -90,5 +98,9 @@ export class SecurityManager {
 			return tasks;
 		}
 		return tasks.filter((t) => this.isTaskAllowed(t));
+	}
+
+	private normalizePath(path: string): string {
+		return path.replace(/\\/g, "/").replace(/^\/+/, "").trim();
 	}
 }

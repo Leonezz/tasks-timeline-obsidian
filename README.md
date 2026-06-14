@@ -1,21 +1,21 @@
-# Tasks Timeline View for Obsidian
+# Tasks Timeline
 
 ![](assets/1.png)
 
-This is a view plugin to show and manage your task items in Obsidian. It is a continuation of [obsidian-tasks-calendar-wrapper](https://github.com/Leonezz/obsidian-tasks-calendar-wrapper),
+Tasks Timeline shows and manages task items in an Obsidian vault. It is a continuation of [obsidian-tasks-calendar-wrapper](https://github.com/Leonezz/obsidian-tasks-calendar-wrapper),
 based on [tasks-timeline-components](https://github.com/Leonezz/tasks-timeline-components).
 
-## MCP Server
+## MCP server
 
 The plugin includes a built-in [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that lets AI agents read and write tasks in your vault.
 
 ### Setup
 
-1. Open **Settings > Tasks Timeline > MCP Server**
-2. Toggle **Enable MCP Server** on
+1. Open **Settings > Tasks Timeline > MCP server**
+2. Toggle **Enable MCP server** on
 3. The server starts on `http://127.0.0.1:27182/mcp` (port is configurable)
 
-### Connecting AI Clients
+### Connecting AI clients
 
 Add the following to your MCP client configuration (e.g. Claude Desktop, Claude Code, Cursor):
 
@@ -28,6 +28,8 @@ Add the following to your MCP client configuration (e.g. Claude Desktop, Claude 
   }
 }
 ```
+
+Bearer-token auth is enabled by default. Copy the token from **Settings > Tasks Timeline > MCP server** and configure it as an `Authorization: Bearer <token>` header in clients that support HTTP MCP headers.
 
 ### Available Tools
 
@@ -61,4 +63,3 @@ Add the following to your MCP client configuration (e.g. Claude Desktop, Claude 
 | `plan_my_day` | Review today's tasks and create a prioritized daily plan |
 | `weekly_review` | Review task progress and suggest priorities for next week |
 | `task_triage` | Identify stale tasks and suggest actions |
-

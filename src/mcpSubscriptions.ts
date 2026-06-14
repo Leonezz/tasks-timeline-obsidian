@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { EventRef } from "obsidian";
 import type TasksTimelineObsidianPlugin from "./main";
+import { getActiveWindow } from "./obsidianDom";
 
 /**
  * Listens to Obsidian vault events and broadcasts MCP resource notifications
@@ -10,8 +11,8 @@ export class ResourceSubscriptionManager {
 	private plugin: TasksTimelineObsidianPlugin;
 	private servers = new Set<McpServer>();
 	private eventRefs: EventRef[] = [];
-	private updateTimer: ReturnType<typeof setTimeout> | null = null;
-	private listChangedTimer: ReturnType<typeof setTimeout> | null = null;
+	private updateTimer: number | null = null;
+	private listChangedTimer: number | null = null;
 
 	private static readonly DEBOUNCE_MS = 500;
 
@@ -58,13 +59,14 @@ export class ResourceSubscriptionManager {
 			this.plugin.app.vault.offref(ref);
 		}
 		this.eventRefs = [];
+		const activeWindow = getActiveWindow(this.plugin.app);
 
 		if (this.updateTimer) {
-			clearTimeout(this.updateTimer);
+			activeWindow.clearTimeout(this.updateTimer);
 			this.updateTimer = null;
 		}
 		if (this.listChangedTimer) {
-			clearTimeout(this.listChangedTimer);
+			activeWindow.clearTimeout(this.listChangedTimer);
 			this.listChangedTimer = null;
 		}
 
@@ -80,20 +82,22 @@ export class ResourceSubscriptionManager {
 	}
 
 	private debouncedResourceUpdated(): void {
+		const activeWindow = getActiveWindow(this.plugin.app);
 		if (this.updateTimer) {
-			clearTimeout(this.updateTimer);
+			activeWindow.clearTimeout(this.updateTimer);
 		}
-		this.updateTimer = setTimeout(() => {
+		this.updateTimer = activeWindow.setTimeout(() => {
 			this.updateTimer = null;
 			this.notifyResourceUpdated();
 		}, ResourceSubscriptionManager.DEBOUNCE_MS);
 	}
 
 	private debouncedResourceListChanged(): void {
+		const activeWindow = getActiveWindow(this.plugin.app);
 		if (this.listChangedTimer) {
-			clearTimeout(this.listChangedTimer);
+			activeWindow.clearTimeout(this.listChangedTimer);
 		}
-		this.listChangedTimer = setTimeout(() => {
+		this.listChangedTimer = activeWindow.setTimeout(() => {
 			this.listChangedTimer = null;
 			this.notifyResourceListChanged();
 		}, ResourceSubscriptionManager.DEBOUNCE_MS);

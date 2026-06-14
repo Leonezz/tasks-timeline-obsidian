@@ -14,15 +14,18 @@ const DEBOUNCE_MS = 5000;
 
 export class StatsTracker {
 	private stats: StatsData = {};
-	private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+	private debounceTimer: number | null = null;
 	private persistFn: (stats: StatsData) => Promise<void>;
+	private win: Window;
 
 	constructor(
 		initialStats: StatsData,
 		persistFn: (stats: StatsData) => Promise<void>,
+		win: Window,
 	) {
 		this.stats = { ...initialStats };
 		this.persistFn = persistFn;
+		this.win = win;
 	}
 
 	recordSuccess(toolName: string): void {
@@ -69,7 +72,7 @@ export class StatsTracker {
 	 */
 	async flush(): Promise<void> {
 		if (this.debounceTimer) {
-			clearTimeout(this.debounceTimer);
+			this.win.clearTimeout(this.debounceTimer);
 			this.debounceTimer = null;
 		}
 		await this.persistFn(this.stats);
@@ -77,9 +80,9 @@ export class StatsTracker {
 
 	private schedulePersist(): void {
 		if (this.debounceTimer) {
-			clearTimeout(this.debounceTimer);
+			this.win.clearTimeout(this.debounceTimer);
 		}
-		this.debounceTimer = setTimeout(() => {
+		this.debounceTimer = this.win.setTimeout(() => {
 			this.debounceTimer = null;
 			void this.persistFn(this.stats);
 		}, DEBOUNCE_MS);

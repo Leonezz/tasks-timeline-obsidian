@@ -27,10 +27,10 @@ export default defineConfig(async ({ mode }) => {
 			minify: prod,
 			sourcemap: prod ? false : "inline",
 			cssCodeSplit: false,
-			emptyOutDir: false,
+			emptyOutDir: prod,
 			outDir: prod
 				? "./dist"
-				: "ExampleVault/.obsidian/plugins/tasks-timeline-obsidian/",
+				: "ExampleVault/.obsidian/plugins/tasks-timeline/",
 			rollupOptions: {
 				input: {
 					main: resolve(__dirname, "src/main.ts"),

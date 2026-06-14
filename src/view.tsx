@@ -1,11 +1,11 @@
 import { IconName, ItemView, WorkspaceLeaf } from "obsidian";
 import { createRoot, Root as ReactRoot } from "react-dom/client";
 import React, { Component, ErrorInfo, ReactNode } from "react";
-import "@tasks-timeline/components/index.css";
+import componentStyles from "@tasks-timeline/components/index.css?inline";
 import TasksTimelineObsidianPlugin from "main";
 import { ObsidianAdaptor } from "./obsidianAdapter";
 
-export const VIEW_TYPE = "tasks-timeline-obsidian";
+export const VIEW_TYPE = "tasks-timeline";
 
 /**
  * Helper to safely unmount a React root and return undefined.
@@ -92,8 +92,19 @@ export class TasksTimelineObsidianView extends ItemView {
 			console.error("Tasks Timeline: Container element not found");
 			return;
 		}
-		container.empty();
-		this.root = createRoot(container);
+		const host = container as HTMLElement;
+		host.empty();
+		host.addClass("tasks-timeline-view-host");
+
+		const shadowRoot =
+			host.shadowRoot ?? host.attachShadow({ mode: "open" });
+		const styleEl = host.ownerDocument.createElement("style");
+		styleEl.textContent = componentStyles;
+		const rootEl = host.ownerDocument.createElement("div");
+		rootEl.className = "tasks-timeline-app";
+		shadowRoot.replaceChildren(styleEl, rootEl);
+
+		this.root = createRoot(rootEl);
 		this.root.render(
 			<React.StrictMode>
 				<TimelineErrorBoundary>
@@ -105,5 +116,7 @@ export class TasksTimelineObsidianView extends ItemView {
 
 	protected async onClose() {
 		this.root = unmountReactRoot(this.root);
+		const container = this.containerEl.children[1] as HTMLElement | undefined;
+		container?.shadowRoot?.replaceChildren();
 	}
 }

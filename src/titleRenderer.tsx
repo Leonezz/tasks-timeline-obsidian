@@ -1,5 +1,6 @@
 import { App } from "obsidian";
 import React from "react";
+import { getActiveWindow } from "./obsidianDom";
 
 type TitleSegment =
 	| { type: "text"; content: string }
@@ -87,7 +88,7 @@ export function createRenderTitle(
 	const handleExternalLink = (e: React.MouseEvent, url: string) => {
 		e.preventDefault();
 		e.stopPropagation();
-		window.open(url, "_blank");
+		getActiveWindow(app).open(url, "_blank", "noopener");
 	};
 
 	const handleInternalLink = (e: React.MouseEvent, page: string) => {

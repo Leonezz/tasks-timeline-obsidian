@@ -27,6 +27,7 @@ CLAUDE.md
 .prd/
 .review/
 .claude/
+.learnings/
 
 # Example vault generated content
 ExampleVault/.obsidian/workspace.json

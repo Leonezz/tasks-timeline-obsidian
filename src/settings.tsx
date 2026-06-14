@@ -1,7 +1,8 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import TasksTimelineObsidianPlugin from "./main";
 import { createRoot, Root as ReactRoot } from "react-dom/client";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import componentStyles from "@tasks-timeline/components/index.css?inline";
 import {
 	AppSettings,
 	cn,
@@ -11,6 +12,7 @@ import {
 import { unmountReactRoot } from "./view";
 import type { StatsData } from "./mcpStats";
 import type { SessionSummary } from "./mcpServer";
+import { getActiveWindow } from "./obsidianDom";
 
 export interface TasksTimelinePluginSettings {
 	appSetting: AppSettings;
@@ -155,14 +157,19 @@ function SettingsPageWrapper({
 }
 
 function ToggleSwitch({
+	ariaLabel,
 	enabled,
 	onToggle,
 }: {
+	ariaLabel: string;
 	enabled: boolean;
 	onToggle: () => void;
 }) {
 	return (
 		<button
+			type="button"
+			aria-label={ariaLabel}
+			aria-pressed={enabled}
 			onClick={onToggle}
 			className={cn(
 				"relative w-10 h-6 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400",
@@ -196,6 +203,7 @@ function McpServerSettings({
 	regenerateToken,
 	getStats,
 	getSessionSummaries,
+	win,
 }: {
 	enabled: boolean;
 	host: string;
@@ -213,9 +221,12 @@ function McpServerSettings({
 	regenerateToken: () => Promise<string>;
 	getStats: () => StatsData;
 	getSessionSummaries: () => SessionSummary[];
+	win: Window;
 }) {
 	const [enabled, setEnabled] = useState(initialEnabled);
-	const [host, setHost] = useState(initialHost);
+	const [host, setHost] = useState(
+		initialHost === "localhost" ? initialHost : "127.0.0.1",
+	);
 	const [port, setPort] = useState(String(initialPort));
 	const [portError, setPortError] = useState("");
 	const [authEnabled, setAuthEnabled] = useState(initialAuthEnabled);
@@ -227,6 +238,12 @@ function McpServerSettings({
 	);
 	const [stats, setStats] = useState<StatsData>({});
 	const [sessions, setSessions] = useState<SessionSummary[]>([]);
+	const copyResetTimer = useRef<number | null>(null);
+	const hostSelectId = "tasks-timeline-mcp-host";
+	const portInputId = "tasks-timeline-mcp-port";
+	const portHelpId = "tasks-timeline-mcp-port-help";
+	const tokenInputId = "tasks-timeline-mcp-token";
+	const blacklistInputId = "tasks-timeline-mcp-blocklist";
 
 	// Load token on mount
 	useEffect(() => {
@@ -240,9 +257,17 @@ function McpServerSettings({
 			setSessions(getSessionSummaries());
 		};
 		refresh();
-		const interval = setInterval(refresh, 5000);
-		return () => clearInterval(interval);
-	}, [getStats, getSessionSummaries]);
+		const interval = win.setInterval(refresh, 5000);
+		return () => win.clearInterval(interval);
+	}, [getStats, getSessionSummaries, win]);
+
+	useEffect(() => {
+		return () => {
+			if (copyResetTimer.current !== null) {
+				win.clearTimeout(copyResetTimer.current);
+			}
+		};
+	}, [win]);
 
 	const handleToggle = () => {
 		const next = !enabled;
@@ -277,10 +302,16 @@ function McpServerSettings({
 	};
 
 	const handleCopyToken = useCallback(async () => {
-		await navigator.clipboard.writeText(token);
+		await win.navigator.clipboard.writeText(token);
 		setTokenCopied(true);
-		setTimeout(() => setTokenCopied(false), 2000);
-	}, [token]);
+		if (copyResetTimer.current !== null) {
+			win.clearTimeout(copyResetTimer.current);
+		}
+		copyResetTimer.current = win.setTimeout(
+			() => setTokenCopied(false),
+			2000,
+		);
+	}, [token, win]);
 
 	const handleRegenerateToken = useCallback(async () => {
 		const newToken = await regenerateToken();
@@ -308,14 +339,14 @@ function McpServerSettings({
 			{/* Server enable/port */}
 			<section>
 				<h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
-					MCP Server
+					MCP server
 				</h3>
 
 				<div className="space-y-4">
 					<div className="flex items-center justify-between">
 						<div className="flex flex-col">
 							<span className="text-sm font-medium text-slate-700">
-								Enable MCP Server
+								Enable MCP server
 							</span>
 							<span className="text-xs text-slate-400">
 								Start a local server so AI agents can read and
@@ -323,6 +354,7 @@ function McpServerSettings({
 							</span>
 						</div>
 						<ToggleSwitch
+							ariaLabel="Enable MCP server"
 							enabled={enabled}
 							onToggle={handleToggle}
 						/>
@@ -330,10 +362,14 @@ function McpServerSettings({
 
 					<div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-4">
 						<div>
-							<label className="text-xs font-medium text-slate-500 block mb-2">
+							<label
+								htmlFor={hostSelectId}
+								className="text-xs font-medium text-slate-500 block mb-2"
+							>
 								Host
 							</label>
 							<select
+								id={hostSelectId}
 								value={host}
 								onChange={handleHostChange}
 								className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500"
@@ -341,29 +377,37 @@ function McpServerSettings({
 								<option value="127.0.0.1">
 									127.0.0.1 (localhost only)
 								</option>
-								<option value="0.0.0.0">
-									0.0.0.0 (all interfaces)
+								<option value="localhost">
+									localhost
 								</option>
 							</select>
 							<p className="text-[10px] text-slate-400 mt-1 pl-1">
-								Use 0.0.0.0 to allow connections from remote AI
-								agents on the local network.
+								The MCP server only accepts local connections.
 							</p>
 						</div>
 						<div>
-							<label className="text-xs font-medium text-slate-500 block mb-2">
+							<label
+								htmlFor={portInputId}
+								className="text-xs font-medium text-slate-500 block mb-2"
+							>
 								Port
 							</label>
 							<input
+								id={portInputId}
 								type="number"
 								value={port}
 								onChange={handlePortChange}
 								placeholder="27182"
 								min={1024}
 								max={65535}
+								aria-invalid={portError ? true : undefined}
+								aria-describedby={portHelpId}
 								className="w-28 px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500"
 							/>
-							<p className="text-[10px] text-slate-400 mt-1 pl-1">
+							<p
+								id={portHelpId}
+								className="text-[10px] text-slate-400 mt-1 pl-1"
+							>
 								Range: 1024-65535. Toggle off and on to apply
 								changes.
 							</p>
@@ -386,13 +430,14 @@ function McpServerSettings({
 					<div className="flex items-center justify-between">
 						<div className="flex flex-col">
 							<span className="text-sm font-medium text-slate-700">
-								Require Bearer Token
+								Require bearer token
 							</span>
 							<span className="text-xs text-slate-400">
 								Clients must include an Authorization header
 							</span>
 						</div>
 						<ToggleSwitch
+							ariaLabel="Require bearer token"
 							enabled={authEnabled}
 							onToggle={handleAuthToggle}
 						/>
@@ -400,23 +445,29 @@ function McpServerSettings({
 
 					{authEnabled && (
 						<div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-							<label className="text-xs font-medium text-slate-500 block mb-2">
-								Auth Token
+							<label
+								htmlFor={tokenInputId}
+								className="text-xs font-medium text-slate-500 block mb-2"
+							>
+								Auth token
 							</label>
 							<div className="flex items-center gap-2">
 								<input
+									id={tokenInputId}
 									type="text"
 									value={token}
 									readOnly
 									className="flex-1 px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none font-mono"
 								/>
 								<button
+									type="button"
 									onClick={() => void handleCopyToken()}
 									className="px-3 py-2 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
 								>
-									{tokenCopied ? "Copied!" : "Copy"}
+									{tokenCopied ? "Copied" : "Copy"}
 								</button>
 								<button
+									type="button"
 									onClick={() => void handleRegenerateToken()}
 									className="px-3 py-2 text-xs bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
 								>
@@ -434,10 +485,17 @@ function McpServerSettings({
 			{/* Security blacklist */}
 			<section>
 				<h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
-					Security Blacklist
+					Security blocklist
 				</h3>
 				<div className="space-y-2">
+					<label
+						htmlFor={blacklistInputId}
+						className="sr-only"
+					>
+						Security blocklist rules
+					</label>
 					<textarea
+						id={blacklistInputId}
 						value={blacklist}
 						onChange={handleBlacklistChange}
 						placeholder={
@@ -457,18 +515,19 @@ function McpServerSettings({
 			{/* Resource subscriptions */}
 			<section>
 				<h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
-					Resource Subscriptions
+					Resource subscriptions
 				</h3>
 				<div className="flex items-center justify-between">
 					<div className="flex flex-col">
 						<span className="text-sm font-medium text-slate-700">
-							Enable Subscriptions
+							Enable subscriptions
 						</span>
 						<span className="text-xs text-slate-400">
 							Notify connected clients when vault content changes
 						</span>
 					</div>
 					<ToggleSwitch
+						ariaLabel="Enable resource subscriptions"
 						enabled={subscriptionsEnabled}
 						onToggle={handleSubscriptionsToggle}
 					/>
@@ -479,7 +538,7 @@ function McpServerSettings({
 			{statEntries.length > 0 && (
 				<section>
 					<h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
-						Tool Usage Stats
+						Tool usage stats
 					</h3>
 					<div className="space-y-1">
 						{statEntries.map(([tool, s]) => (
@@ -504,7 +563,7 @@ function McpServerSettings({
 			{sessions.length > 0 && (
 				<section>
 					<h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
-						Active Sessions
+						Active sessions
 					</h3>
 					<div className="space-y-2">
 						{sessions.map((s) => (
@@ -546,6 +605,10 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 
 	hide(): void {
 		this.root = unmountReactRoot(this.root);
+		const host = this.containerEl.querySelector<HTMLElement>(
+			".tasks-timeline-settings-host",
+		);
+		host?.shadowRoot?.replaceChildren();
 	}
 
 	display(): void {
@@ -585,7 +648,7 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 
 		const mcpTab: CustomSettingsTab = {
 			id: "mcp-server",
-			label: "MCP Server",
+			label: "MCP server",
 			icon: "Plug",
 			content: (
 				<McpServerSettings
@@ -634,12 +697,23 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 					getSessionSummaries={() =>
 						this.plugin.getMcpSessionSummaries()
 					}
+					win={getActiveWindow(this.app)}
 				/>
 			),
 		};
 
 		const tagSettings = new Setting(containerEl);
-		this.root = createRoot(tagSettings.settingEl);
+		tagSettings.settingEl.addClass("tasks-timeline-settings-host");
+		const shadowRoot =
+			tagSettings.settingEl.shadowRoot ??
+			tagSettings.settingEl.attachShadow({ mode: "open" });
+		const styleEl = tagSettings.settingEl.ownerDocument.createElement("style");
+		styleEl.textContent = componentStyles;
+		const rootEl = tagSettings.settingEl.ownerDocument.createElement("div");
+		rootEl.className = "tasks-timeline-settings";
+		shadowRoot.replaceChildren(styleEl, rootEl);
+
+		this.root = createRoot(rootEl);
 		this.root.render(
 			<React.StrictMode>
 				<SettingsPageWrapper

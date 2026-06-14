@@ -16,10 +16,12 @@ import {
 import { ObsidianMcpServer, type SessionSummary } from "./mcpServer";
 import { McpAuthManager } from "./mcpAuth";
 import { StatsTracker, type StatsData } from "./mcpStats";
+import "./styles.css";
+import { getActiveDocument, getActiveWindow } from "./obsidianDom";
 
 export default class TasksTimelineObsidianPlugin extends Plugin {
 	settings: TasksTimelineObsidianPluginSettings;
-	themeObserver: MutationObserver;
+	themeObserver: MutationObserver | null = null;
 	bus = new TypedBus<Events>();
 	private mcpServer: ObsidianMcpServer | null = null;
 	private authManager: McpAuthManager | null = null;
@@ -42,7 +44,7 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 			const data =
 				((await this.loadData()) as Record<string, unknown>) ?? {};
 			await this.saveData({ ...data, mcpStats: stats });
-		});
+		}, getActiveWindow(this.app));
 
 		// Start MCP server if enabled
 		if (this.settings.mcpServer.enabled) {
@@ -62,11 +64,18 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 			return view;
 		});
 		await this.activateView();
-		this.themeObserver = new MutationObserver((mutations) => {
-			mutations.forEach((mutation) => {
+		const activeDocument = getActiveDocument(this.app);
+		const activeWindow = getActiveWindow(this.app);
+		const { body } = activeDocument;
+		const MutationObserverCtor = (
+			activeWindow as unknown as {
+				MutationObserver: typeof MutationObserver;
+			}
+		).MutationObserver;
+		this.themeObserver = new MutationObserverCtor((mutations) => {
+			mutations.forEach((mutation: MutationRecord) => {
 				if (mutation.attributeName === "class") {
-					const isDarkMode =
-						document.body.classList.contains("theme-dark");
+					const isDarkMode = body.classList.contains("theme-dark");
 					console.debug(
 						"Theme changed. Dark mode active:",
 						isDarkMode,
@@ -78,7 +87,7 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 				}
 			});
 		});
-		this.themeObserver.observe(document.body, {
+		this.themeObserver.observe(body, {
 			attributes: true,
 			attributeFilter: ["class"],
 		});
@@ -86,7 +95,8 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 
 	onunload() {
 		// this.app.workspace.detachLeavesOfType(VIEW_TYPE);
-		this.themeObserver.disconnect();
+		this.themeObserver?.disconnect();
+		this.themeObserver = null;
 
 		// Flush stats before shutdown
 		if (this.statsTracker) {

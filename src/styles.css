@@ -1,0 +1,5 @@
+.tasks-timeline-view-host,
+.tasks-timeline-settings-host {
+	height: 100%;
+	min-height: 0;
+}

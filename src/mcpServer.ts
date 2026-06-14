@@ -13,13 +13,11 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import {
 	createCapabilities,
-	type CapabilityContext,
 	type Capabilities,
 	type PromptSpec,
-	type Task,
+	type ResourceSpec,
 } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "./main";
-import { ObsidianTasksRepo } from "./tasksRepo";
 
 import { TOOL_ANNOTATIONS, generateResultAnnotations } from "./mcpAnnotations";
 import type { McpAuthManager } from "./mcpAuth";
@@ -28,6 +26,8 @@ import { SecurityManager } from "./mcpSecurity";
 import { McpLogger } from "./mcpLogger";
 import { ResourceSubscriptionManager } from "./mcpSubscriptions";
 import { createObsidianPrompts } from "./mcpPrompts";
+import { createObsidianCapabilityContext } from "./taskCapabilities";
+import { getActiveWindow } from "./obsidianDom";
 
 // --- Session types ---
 
@@ -66,69 +66,29 @@ export interface SessionSummary {
 const MAX_SESSIONS = 10;
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const EXTERNAL_MCP_TOOL_NAMES = new Set([
+	"query_tasks",
+	"get_task_stats",
+	"get_today_plan",
+	"create_task",
+	"update_task",
+	"batch_update_tasks",
+	"complete_task",
+	"cancel_task",
+	"delete_task",
+]);
 
-/**
- * Creates a CapabilityContext that bridges to Obsidian vault APIs.
- * Applies security filtering when a SecurityManager is provided.
- */
-function createObsidianContext(
-	plugin: TasksTimelineObsidianPlugin,
-	tasksRepo: ObsidianTasksRepo,
-	securityManager?: SecurityManager,
-): CapabilityContext {
-	return {
-		async getTasks(): Promise<Task[]> {
-			const tasks = await tasksRepo.loadTasks();
-			return securityManager ? securityManager.filterTasks(tasks) : tasks;
-		},
+const RESERVED_TASK_RESOURCE_URIS = new Set([
+	"tasks://all",
+	"tasks://task",
+	"tasks://overdue",
+	"tasks://today",
+	"tasks://upcoming",
+	"tasks://stats",
+]);
 
-		async getTask(id: string): Promise<Task | null> {
-			const tasks = await tasksRepo.loadTasks();
-			const task = tasks.find((t) => t.id === id) ?? null;
-			if (
-				task &&
-				securityManager &&
-				!securityManager.isTaskAllowed(task)
-			) {
-				return null;
-			}
-			return task;
-		},
-
-		async addTask(task: Task): Promise<void> {
-			const targetFile =
-				task.category ||
-				plugin.settings.appSetting.defaultCategory ||
-				"Tasks.md";
-
-			// Check path against security blacklist
-			if (securityManager && !securityManager.isPathAllowed(targetFile)) {
-				throw new Error(
-					`Cannot add task: path is blocked by security rules: ${targetFile}`,
-				);
-			}
-
-			await tasksRepo.addTask(task);
-		},
-
-		async updateTask(task: Task): Promise<void> {
-			await tasksRepo.loadTasks();
-			await tasksRepo.updateTask(task);
-		},
-
-		async deleteTask(id: string): Promise<void> {
-			await tasksRepo.loadTasks();
-			await tasksRepo.deleteTask(id);
-		},
-
-		getSettings() {
-			return plugin.settings.appSetting;
-		},
-
-		notify(_type: "success" | "error" | "info", message: string) {
-			new Notice(message);
-		},
-	};
+function isLocalMcpHost(host: string): boolean {
+	return host === "127.0.0.1" || host === "localhost";
 }
 
 /**
@@ -142,7 +102,7 @@ export class ObsidianMcpServer {
 	private capabilities: Capabilities;
 	private obsidianPrompts: PromptSpec[] = [];
 	private sessions = new Map<string, McpSession>();
-	private cleanupInterval: ReturnType<typeof setInterval> | null = null;
+	private cleanupInterval: number | null = null;
 
 	// Injected dependencies
 	private authManager: McpAuthManager | null = null;
@@ -159,10 +119,8 @@ export class ObsidianMcpServer {
 			plugin.settings.mcpServer.blacklist ?? "",
 		);
 
-		const tasksRepo = new ObsidianTasksRepo(plugin);
-		const ctx = createObsidianContext(
+		const ctx = createObsidianCapabilityContext(
 			plugin,
-			tasksRepo,
 			this.securityManager,
 		);
 		this.capabilities = createCapabilities(ctx);
@@ -236,7 +194,7 @@ export class ObsidianMcpServer {
 
 		const mcpServer = new McpServer(
 			{
-				name: "tasks-timeline-obsidian",
+				name: "tasks-timeline-mcp-server",
 				version: this.plugin.manifest.version,
 			},
 			{
@@ -258,12 +216,14 @@ export class ObsidianMcpServer {
 
 		// --- Tools ---
 		server.setRequestHandler(ListToolsRequestSchema, async () => {
-			const tools = this.capabilities.tools.map((tool) => ({
-				name: tool.name,
-				description: tool.description,
-				inputSchema: tool.schema,
-				annotations: TOOL_ANNOTATIONS[tool.name],
-			}));
+			const tools = this.capabilities.tools
+				.filter((tool) => EXTERNAL_MCP_TOOL_NAMES.has(tool.name))
+				.map((tool) => ({
+					name: tool.name,
+					description: tool.description,
+					inputSchema: tool.schema,
+					annotations: TOOL_ANNOTATIONS[tool.name],
+				}));
 
 			// Add the custom list_sessions tool
 			tools.push({
@@ -293,6 +253,10 @@ export class ObsidianMcpServer {
 					],
 					structuredContent: summaries,
 				};
+			}
+
+			if (!EXTERNAL_MCP_TOOL_NAMES.has(name)) {
+				throw new Error(`Unknown tool: ${name}`);
 			}
 
 			const tool = this.capabilities.getTool(name);
@@ -356,6 +320,7 @@ export class ObsidianMcpServer {
 			resources: this.capabilities.resources.map((resource) => ({
 				name: resource.name,
 				uri: resource.uri,
+				uriTemplate: resource.uriTemplate,
 				description: resource.description,
 				mimeType: resource.mimeType,
 			})),
@@ -363,14 +328,13 @@ export class ObsidianMcpServer {
 
 		server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
 			const uri = request.params.uri;
-			const resource = this.capabilities.resources.find(
-				(r) => r.uri === uri,
-			);
+			const resolved = this.resolveResource(uri);
+			const resource = resolved?.resource;
 			if (!resource) {
 				throw new Error(`Unknown resource: ${uri}`);
 			}
 
-			const result = await resource.read();
+			const result = await resource.read(resolved?.params);
 			return { contents: result.contents };
 		});
 
@@ -432,6 +396,69 @@ export class ObsidianMcpServer {
 				errors: success ? prev.errors : prev.errors + 1,
 			},
 		};
+	}
+
+	private resolveResource(
+		uri: string,
+	): { resource: ResourceSpec; params?: Record<string, string> } | null {
+		const exactResource = this.capabilities.resources.find(
+			(resource) => resource.uri === uri,
+		);
+		if (exactResource) {
+			return { resource: exactResource };
+		}
+
+		if (
+			uri.startsWith("tasks://") &&
+			!RESERVED_TASK_RESOURCE_URIS.has(uri)
+		) {
+			const taskId = uri.slice("tasks://".length);
+			const taskResource = this.capabilities.resources.find(
+				(resource) => resource.name === "task-by-id",
+			);
+			if (taskId && taskResource) {
+				return {
+					resource: taskResource,
+					params: { taskId },
+				};
+			}
+		}
+
+		return null;
+	}
+
+	private getSafeHost(): string {
+		const host = this.plugin.settings.mcpServer.host ?? "127.0.0.1";
+		if (isLocalMcpHost(host)) {
+			return host;
+		}
+
+		this.logger.warning(
+			`Ignoring unsafe MCP host "${host}". Binding to 127.0.0.1 instead.`,
+			"http",
+		);
+		return "127.0.0.1";
+	}
+
+	private isAllowedOrigin(
+		originHeader: string | string[] | undefined,
+	): boolean {
+		if (!originHeader) {
+			return true;
+		}
+
+		const origins = Array.isArray(originHeader)
+			? originHeader
+			: [originHeader];
+
+		return origins.every((origin) => {
+			try {
+				const url = new URL(origin);
+				return isLocalMcpHost(url.hostname);
+			} catch {
+				return false;
+			}
+		});
 	}
 
 	private createSession(): McpSession {
@@ -513,7 +540,7 @@ export class ObsidianMcpServer {
 	}
 
 	async start(): Promise<void> {
-		const host = this.plugin.settings.mcpServer.host ?? "127.0.0.1";
+		const host = this.getSafeHost();
 		const port = this.plugin.settings.mcpServer.port;
 
 		if (port < 1024 || port > 65535) {
@@ -528,7 +555,7 @@ export class ObsidianMcpServer {
 		}
 
 		// Start session cleanup interval
-		this.cleanupInterval = setInterval(() => {
+		this.cleanupInterval = getActiveWindow(this.plugin.app).setInterval(() => {
 			this.cleanupExpiredSessions();
 		}, CLEANUP_INTERVAL_MS);
 
@@ -538,6 +565,18 @@ export class ObsidianMcpServer {
 				if (req.url !== "/mcp") {
 					res.writeHead(404);
 					res.end("Not found");
+					return;
+				}
+
+				if (!this.isAllowedOrigin(req.headers.origin)) {
+					res.writeHead(403, {
+						"Content-Type": "application/json",
+					});
+					res.end(JSON.stringify({ error: "Origin not allowed" }));
+					this.logger.warning(
+						`Rejected MCP request from origin: ${String(req.headers.origin)}`,
+						"http",
+					);
 					return;
 				}
 
@@ -649,7 +688,7 @@ export class ObsidianMcpServer {
 
 		// Stop cleanup interval
 		if (this.cleanupInterval) {
-			clearInterval(this.cleanupInterval);
+			getActiveWindow(this.plugin.app).clearInterval(this.cleanupInterval);
 			this.cleanupInterval = null;
 		}
 

@@ -1,4 +1,4 @@
-# Testing Guide for Tasks Timeline Obsidian
+# Testing guide for Tasks Timeline
 
 This guide explains the testing setup optimized for AI agents working on this plugin.
 
