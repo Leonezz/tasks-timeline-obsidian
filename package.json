@@ -1,13 +1,20 @@
 {
 	"name": "tasks-timeline-obsidian",
 	"version": "0.2.0",
-	"description": "This is a timeline style viewer for your tasks",
-	"main": "src/main.ts",
+	"description": "View and manage vault tasks on a timeline.",
+	"main": "dist/main.js",
 	"type": "module",
+	"files": [
+		"dist",
+		"manifest.json",
+		"versions.json",
+		"README.md",
+		"LICENSE"
+	],
 	"scripts": {
-		"dev": "cp manifest.json ExampleVault/.obsidian/plugins/tasks-timeline-obsidian/ && vite build --watch --mode=development",
+		"dev": "cp manifest.json ExampleVault/.obsidian/plugins/tasks-timeline/ && vite build --watch --mode=development",
 		"build": "vite build && cp manifest.json ./dist/",
-		"release": "git tag -a %npm_config_tag% -m '%npm_config_tag%' && git push origin %npm_config_tag%",
+		"release": "git tag -a v$npm_package_version -m v$npm_package_version && git push origin v$npm_package_version",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"lint": "eslint .",
 		"test": "jest",
@@ -37,6 +44,7 @@
 		"jest": "^30.2.0",
 		"jest-environment-jsdom": "^30.2.0",
 		"jiti": "2.6.1",
+		"obsidian": "1.12.3",
 		"ts-jest": "^29.4.6",
 		"tslib": "2.4.0",
 		"typescript": "^5.9.3",
@@ -44,18 +52,27 @@
 		"vite": "^7.3.1"
 	},
 	"dependencies": {
-		"@anthropic-ai/sdk": "^0.78.0",
-		"@google/genai": "^1.42.0",
 		"@modelcontextprotocol/sdk": "^1.27.1",
-		"@tasks-timeline/components": "0.4.3",
-		"ahooks": "^3.9.6",
+		"@tasks-timeline/components": "0.4.6",
 		"emoji-regex": "^10.6.0",
 		"luxon": "^3.7.2",
-		"obsidian": "latest",
-		"openai": "^6.25.0",
 		"parsimmon": "^1.18.1",
 		"react": "19.2.4",
 		"react-dom": "19.2.4"
+	},
+	"pnpm": {
+		"overrides": {
+			"@hono/node-server": "1.19.14",
+			"@protobufjs/utf8": "1.1.1",
+			"brace-expansion": "5.0.6",
+			"express-rate-limit": "8.5.2",
+			"fast-uri": "3.1.2",
+			"hono": "4.12.25",
+			"path-to-regexp": "8.4.2",
+			"protobufjs": "7.6.4",
+			"qs": "6.15.2",
+			"ws": "8.21.0"
+		}
 	},
 	"packageManager": "pnpm@10.27.0+sha512.72d699da16b1179c14ba9e64dc71c9a40988cbdc65c264cb0e489db7de917f20dcf4d64d8723625f2969ba52d4b7e2a1170682d9ac2a5dcaeaab732b7e16f04a"
 }
