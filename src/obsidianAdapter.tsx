@@ -14,6 +14,7 @@ import {
 } from "react";
 import { ObsidianSettingRepo } from "./settingsRepo";
 import { ObsidianTasksRepo } from "./tasksRepo";
+import { ObsidianSecretField } from "./secretField";
 import { createRenderTitle } from "./titleRenderer";
 import { App, debounce, Notice, Pos, requestUrl, TFile } from "obsidian";
 import { getActiveWindow } from "./obsidianDom";
@@ -253,6 +254,9 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			systemInDarkMode={isDarkMode}
 			onItemClick={(item) => handleItemClick(item, plugin.app)}
 			renderTitle={renderTitle}
+			renderSecretField={(context) => (
+				<ObsidianSecretField context={context} plugin={plugin} />
+			)}
 			aiSystemPrompt="In this Obsidian vault, each task's category is derived from the path of the note file it belongs to. When reasoning about tasks, treat the category as the file-level topic or project the task is part of."
 			voiceRuntime={voiceRuntime}
 		/>
