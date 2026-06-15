@@ -1,150 +1,207 @@
-import type { AIProvider, AppSettings, VoiceProvider } from "@tasks-timeline/components";
+import type { AppSettings } from "@tasks-timeline/components";
 import type { App } from "obsidian";
 
-/**
- * Feature detection: returns true if Obsidian supports SecretStorage (>= 1.11.4).
- */
-export function hasSecretStorage(app: App): boolean {
+export interface SecretSelector {
+	readonly path: readonly string[];
+}
+
+const SECRET_ID_PREFIX = "tasks-timeline-secret";
+
+const LEGACY_SECRET_ID_MIGRATIONS = new Map<string, string[]>([
+	[
+		"aiConfig.providers.gemini.apiKey",
+		["tasks-timeline-ai-gemini-apikey"],
+	],
+	[
+		"aiConfig.providers.anthropic.apiKey",
+		["tasks-timeline-ai-anthropic-apikey"],
+	],
+	[
+		"aiConfig.providers.openai.apiKey",
+		["tasks-timeline-ai-openai-apikey"],
+	],
+	[
+		"aiConfig.providers.openai-compatible.apiKey",
+		["tasks-timeline-ai-openai-compatible-apikey"],
+	],
+	[
+		"voiceConfig.providers.openai.apiKey",
+		["tasks-timeline-voice-openai-apikey"],
+	],
+	[
+		"voiceConfig.providers.gemini.apiKey",
+		["tasks-timeline-voice-gemini-apikey"],
+	],
+]);
+
+export const MCP_AUTH_TOKEN_SECRET_SELECTOR: SecretSelector = {
+	path: ["mcpServer", "authToken"],
+};
+
+function normalizeSecretSegment(segment: string): string {
+	return segment
+		.replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+}
+
+export function secretIdFromSelector(selector: SecretSelector): string {
+	const path = selector.path.map(normalizeSecretSegment).filter(Boolean);
+	return [SECRET_ID_PREFIX, ...path].join("-");
+}
+
+export function readSecret(app: App, selector: SecretSelector): string | null {
+	return app.secretStorage.getSecret(secretIdFromSelector(selector));
+}
+
+export function writeSecret(
+	app: App,
+	selector: SecretSelector,
+	secret: string,
+): void {
+	app.secretStorage.setSecret(secretIdFromSelector(selector), secret);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
 	return (
-		"secretStorage" in app &&
-		app.secretStorage != null &&
-		typeof app.secretStorage.getSecret === "function"
+		typeof value === "object" &&
+		value !== null &&
+		!Array.isArray(value)
 	);
 }
 
-function aiSecretId(provider: AIProvider): string {
-	return `tasks-timeline-ai-${provider}-apikey`;
+function emitSecretSelectorsFromValue(
+	value: unknown,
+	path: readonly string[],
+): SecretSelector[] {
+	if (!isRecord(value)) {
+		return [];
+	}
+
+	const selectors: SecretSelector[] = [];
+	for (const [key, child] of Object.entries(value)) {
+		const childPath = [...path, key];
+		if (key === "apiKey" && typeof child === "string") {
+			selectors.push({ path: childPath });
+			continue;
+		}
+		selectors.push(...emitSecretSelectorsFromValue(child, childPath));
+	}
+	return selectors;
 }
 
-function voiceSecretId(provider: VoiceProvider): string {
-	return `tasks-timeline-voice-${provider}-apikey`;
+export function emitSecretSelectors(settings: AppSettings): SecretSelector[] {
+	return emitSecretSelectorsFromValue(settings, []);
+}
+
+function readSettingValue(
+	settings: AppSettings,
+	selector: SecretSelector,
+): string {
+	let cursor: unknown = settings;
+	for (const segment of selector.path) {
+		if (!isRecord(cursor)) {
+			return "";
+		}
+		cursor = cursor[segment];
+	}
+	return typeof cursor === "string" ? cursor : "";
+}
+
+function writeSettingValue<T>(
+	value: T,
+	selector: SecretSelector,
+	secret: string,
+): T {
+	const writeAtPath = (cursor: unknown, index: number): unknown => {
+		if (index === selector.path.length) {
+			return secret;
+		}
+
+		if (!isRecord(cursor)) {
+			return cursor;
+		}
+
+		const segment = selector.path[index];
+		return {
+			...cursor,
+			[segment]: writeAtPath(cursor[segment], index + 1),
+		};
+	};
+
+	return writeAtPath(value, 0) as T;
+}
+
+function legacySecretIds(selector: SecretSelector): string[] {
+	return LEGACY_SECRET_ID_MIGRATIONS.get(selector.path.join(".")) ?? [];
+}
+
+function migrateLegacySecrets(app: App, settings: AppSettings): void {
+	for (const selector of emitSecretSelectors(settings)) {
+		if (readSecret(app, selector) !== null) {
+			continue;
+		}
+
+		for (const legacyId of legacySecretIds(selector)) {
+			const legacySecret = app.secretStorage.getSecret(legacyId);
+			if (legacySecret) {
+				writeSecret(app, selector, legacySecret);
+				break;
+			}
+		}
+	}
 }
 
 /**
- * Reads API keys from SecretStorage and populates them into the settings object.
- * Returns a new settings object with keys filled in.
- * If SecretStorage is unavailable, returns settings as-is.
+ * Reads API keys from SecretStorage and populates them into a new settings object.
  */
 export function resolveSecrets(app: App, settings: AppSettings): AppSettings {
-	if (!hasSecretStorage(app)) {
-		return settings;
-	}
-
-	const ss = app.secretStorage;
 	let result = { ...settings };
 
-	// Resolve AI provider keys
-	if (result.aiConfig?.providers) {
-		const updatedProviders = { ...result.aiConfig.providers };
-		for (const provider of Object.keys(updatedProviders) as AIProvider[]) {
-			const secret = ss.getSecret(aiSecretId(provider));
-			if (secret) {
-				updatedProviders[provider] = {
-					...updatedProviders[provider],
-					apiKey: secret,
-				};
-			}
+	for (const selector of emitSecretSelectors(settings)) {
+		const secret = readSecret(app, selector);
+		if (secret) {
+			result = writeSettingValue(result, selector, secret);
 		}
-		result = {
-			...result,
-			aiConfig: { ...result.aiConfig, providers: updatedProviders },
-		};
-	}
-
-	// Resolve voice provider keys
-	if (result.voiceConfig?.providers) {
-		const voiceProviders = { ...result.voiceConfig.providers };
-		const openaiVoiceSecret = ss.getSecret(voiceSecretId("openai"));
-		if (openaiVoiceSecret) {
-			voiceProviders.openai = {
-				...voiceProviders.openai,
-				apiKey: openaiVoiceSecret,
-			};
-		}
-		const geminiVoiceSecret = ss.getSecret(voiceSecretId("gemini"));
-		if (geminiVoiceSecret) {
-			voiceProviders.gemini = {
-				...voiceProviders.gemini,
-				apiKey: geminiVoiceSecret,
-			};
-		}
-		result = {
-			...result,
-			voiceConfig: { ...result.voiceConfig, providers: voiceProviders },
-		};
 	}
 
 	return result;
 }
 
 /**
- * Extracts non-empty API keys from settings, stores them in SecretStorage,
- * and returns settings with those keys cleared to "".
- * If SecretStorage is unavailable, returns settings as-is.
+ * Extracts API keys from settings, stores them in SecretStorage, and returns
+ * settings with those key fields cleared to "".
  */
 export function extractAndStoreSecrets(
 	app: App,
-	settings: AppSettings
+	settings: AppSettings,
+	options: { clearMissingSecrets?: boolean } = {},
 ): AppSettings {
-	if (!hasSecretStorage(app)) {
-		return settings;
-	}
-
-	const ss = app.secretStorage;
+	const { clearMissingSecrets = true } = options;
 	let result = { ...settings };
 
-	// Extract AI provider keys
-	if (result.aiConfig?.providers) {
-		const updatedProviders = { ...result.aiConfig.providers };
-		for (const provider of Object.keys(updatedProviders) as AIProvider[]) {
-			const key = updatedProviders[provider]?.apiKey;
-			if (key) {
-				ss.setSecret(aiSecretId(provider), key);
-				updatedProviders[provider] = {
-					...updatedProviders[provider],
-					apiKey: "",
-				};
-			}
+	for (const selector of emitSecretSelectors(settings)) {
+		const key = readSettingValue(settings, selector);
+		if (key || clearMissingSecrets) {
+			writeSecret(app, selector, key);
 		}
-		result = {
-			...result,
-			aiConfig: { ...result.aiConfig, providers: updatedProviders },
-		};
-	}
-
-	// Extract voice provider keys
-	if (result.voiceConfig?.providers) {
-		const voiceProviders = { ...result.voiceConfig.providers };
-		if (voiceProviders.openai?.apiKey) {
-			ss.setSecret(voiceSecretId("openai"), voiceProviders.openai.apiKey);
-			voiceProviders.openai = {
-				...voiceProviders.openai,
-				apiKey: "",
-			};
-		}
-		if (voiceProviders.gemini?.apiKey) {
-			ss.setSecret(voiceSecretId("gemini"), voiceProviders.gemini.apiKey);
-			voiceProviders.gemini = {
-				...voiceProviders.gemini,
-				apiKey: "",
-			};
-		}
-		result = {
-			...result,
-			voiceConfig: { ...result.voiceConfig, providers: voiceProviders },
-		};
+		result = writeSettingValue(result, selector, "");
 	}
 
 	return result;
 }
 
 /**
- * One-time migration: if plaintext API keys exist in settings, move them to SecretStorage.
- * Returns settings with keys cleared.
+ * One-time migration: if plaintext API keys or legacy provider-pattern secret
+ * IDs exist, move them to selector-derived SecretStorage entries.
  */
 export function migrateExistingKeysToSecretStorage(
 	app: App,
-	settings: AppSettings
+	settings: AppSettings,
 ): AppSettings {
-	return extractAndStoreSecrets(app, settings);
+	migrateLegacySecrets(app, settings);
+	return extractAndStoreSecrets(app, settings, {
+		clearMissingSecrets: false,
+	});
 }

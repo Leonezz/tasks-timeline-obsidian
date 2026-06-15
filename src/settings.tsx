@@ -28,7 +28,7 @@ export interface TasksTimelinePluginSettings {
 	};
 }
 
-export const CURRENT_SETTINGS_VERSION = 4;
+export const CURRENT_SETTINGS_VERSION = 5;
 
 export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 	appSetting: {

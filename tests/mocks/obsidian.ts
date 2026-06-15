@@ -163,7 +163,7 @@ export class Plugin {
 			id: 'test-plugin',
 			name: 'Test Plugin',
 			version: '0.0.1',
-			minAppVersion: '0.15.0',
+			minAppVersion: '1.11.4',
 			description: 'Test plugin',
 			author: 'Test',
 			authorUrl: '',

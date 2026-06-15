@@ -56,6 +56,14 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 			void this.activateView();
 		});
 
+		this.addCommand({
+			id: "open-timeline",
+			name: "Open timeline",
+			callback: () => {
+				void this.activateView();
+			},
+		});
+
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(new TasksTimelineSettingTab(this.app, this));
 
@@ -140,7 +148,7 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 				this.settings.appSetting,
 			);
 			this.settings._settingsVersion = CURRENT_SETTINGS_VERSION;
-			await this.saveSettings();
+			await this.saveSettings({ clearMissingSecrets: false });
 		}
 
 		// Always keep secrets resolved in memory
@@ -182,13 +190,16 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 		}
 	}
 
-	async saveSettings() {
+	async saveSettings(
+		options: { clearMissingSecrets?: boolean } = {},
+	): Promise<void> {
 		// Strip secrets for disk storage, but keep them in memory
 		const forDisk = {
 			...this.settings,
 			appSetting: extractAndStoreSecrets(
 				this.app,
 				this.settings.appSetting,
+				options,
 			),
 		};
 		await this.saveData(forDisk);

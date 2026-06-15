@@ -1,8 +1,10 @@
 import crypto from "node:crypto";
 import type { App } from "obsidian";
-import { hasSecretStorage } from "./secretStorage";
-
-const SECRET_KEY = "tasks-timeline-mcp-auth-token";
+import {
+	MCP_AUTH_TOKEN_SECRET_SELECTOR,
+	readSecret,
+	writeSecret,
+} from "./secretStorage";
 
 /**
  * Manages bearer-token authentication for the MCP server.
@@ -27,12 +29,10 @@ export class McpAuthManager {
 			return this.cachedToken;
 		}
 
-		if (hasSecretStorage(this.app)) {
-			const stored = this.app.secretStorage.getSecret(SECRET_KEY);
-			if (stored) {
-				this.cachedToken = stored;
-				return stored;
-			}
+		const stored = readSecret(this.app, MCP_AUTH_TOKEN_SECRET_SELECTOR);
+		if (stored) {
+			this.cachedToken = stored;
+			return stored;
 		}
 
 		// Generate a new token
@@ -72,8 +72,6 @@ export class McpAuthManager {
 
 	private async storeToken(token: string): Promise<void> {
 		this.cachedToken = token;
-		if (hasSecretStorage(this.app)) {
-			this.app.secretStorage.setSecret(SECRET_KEY, token);
-		}
+		writeSecret(this.app, MCP_AUTH_TOKEN_SECRET_SELECTOR, token);
 	}
 }

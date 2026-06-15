@@ -1,10 +1,12 @@
 import type { AppSettings } from "@tasks-timeline/components";
 import { App } from "../mocks/obsidian";
 import {
-	hasSecretStorage,
 	resolveSecrets,
 	extractAndStoreSecrets,
 	migrateExistingKeysToSecretStorage,
+	emitSecretSelectors,
+	secretIdFromSelector,
+	writeSecret,
 } from "../../src/secretStorage";
 
 const defaultAppSetting: AppSettings = {
@@ -91,17 +93,28 @@ function makeSettingsWithKeys(): AppSettings {
 	};
 }
 
-describe("hasSecretStorage", () => {
-	it("returns true when secretStorage exists with methods", () => {
-		const app = makeApp();
-		expect(hasSecretStorage(app as never)).toBe(true);
+describe("secret selectors", () => {
+	it("emits selectors for API key fields", () => {
+		const selectors = emitSecretSelectors(defaultAppSetting).map((selector) =>
+			selector.path.join(".")
+		);
+
+		expect(selectors).toEqual([
+			"aiConfig.providers.gemini.apiKey",
+			"aiConfig.providers.anthropic.apiKey",
+			"aiConfig.providers.openai.apiKey",
+			"aiConfig.providers.openai-compatible.apiKey",
+			"voiceConfig.providers.openai.apiKey",
+			"voiceConfig.providers.gemini.apiKey",
+		]);
 	});
 
-	it("returns false when secretStorage is missing", () => {
-		const app = makeApp();
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-		delete (app as any).secretStorage;
-		expect(hasSecretStorage(app as never)).toBe(false);
+	it("derives SecretStorage IDs from selectors", () => {
+		const [selector] = emitSecretSelectors(defaultAppSetting);
+
+		expect(secretIdFromSelector(selector)).toBe(
+			"tasks-timeline-secret-ai-config-providers-gemini-api-key"
+		);
 	});
 });
 
@@ -162,20 +175,30 @@ describe("extractAndStoreSecrets + resolveSecrets round-trip", () => {
 		expect(resolved.aiConfig.providers.gemini.apiKey).toBe("only-gemini");
 		expect(resolved.aiConfig.providers.anthropic.apiKey).toBe("");
 	});
-});
 
-describe("no SecretStorage fallback", () => {
-	it("returns settings unchanged when SecretStorage is missing", () => {
+	it("overwrites stored secrets with blanks when keys are cleared", () => {
 		const app = makeApp();
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-		delete (app as any).secretStorage;
 		const settings = makeSettingsWithKeys();
+		const [selector] = emitSecretSelectors(settings);
 
-		const cleaned = extractAndStoreSecrets(app as never, settings);
-		expect(cleaned.aiConfig.providers.gemini.apiKey).toBe("gemini-secret");
+		writeSecret(app as never, selector, "stored-before-clear");
 
-		const resolved = resolveSecrets(app as never, settings);
-		expect(resolved.aiConfig.providers.gemini.apiKey).toBe("gemini-secret");
+		const cleared = {
+			...settings,
+			aiConfig: {
+				...settings.aiConfig,
+				providers: {
+					...settings.aiConfig.providers,
+					gemini: {
+						...settings.aiConfig.providers.gemini,
+						apiKey: "",
+					},
+				},
+			},
+		};
+
+		extractAndStoreSecrets(app as never, cleared);
+		expect(app.secretStorage.getSecret(secretIdFromSelector(selector))).toBe("");
 	});
 });
 
@@ -190,8 +213,68 @@ describe("migrateExistingKeysToSecretStorage", () => {
 		);
 		expect(result.aiConfig.providers.gemini.apiKey).toBe("");
 
-		expect(app.secretStorage.getSecret("tasks-timeline-ai-gemini-apikey")).toBe(
+		expect(
+			app.secretStorage.getSecret(
+				"tasks-timeline-secret-ai-config-providers-gemini-api-key"
+			)
+		).toBe(
 			"gemini-secret"
 		);
+	});
+
+	it("migrates legacy pattern IDs into selector IDs", () => {
+		const app = makeApp();
+		app.secretStorage.setSecret(
+			"tasks-timeline-ai-openai-compatible-apikey",
+			"legacy-compatible-secret"
+		);
+
+		const result = migrateExistingKeysToSecretStorage(
+			app as never,
+			defaultAppSetting
+		);
+
+		expect(result.aiConfig.providers["openai-compatible"].apiKey).toBe("");
+		expect(
+			app.secretStorage.getSecret(
+				"tasks-timeline-secret-ai-config-providers-openai-compatible-api-key"
+			)
+		).toBe("legacy-compatible-secret");
+	});
+
+	it("does not clear migrated secrets when plaintext keys are missing", () => {
+		const app = makeApp();
+		app.secretStorage.setSecret(
+			"tasks-timeline-voice-openai-apikey",
+			"legacy-voice-secret"
+		);
+
+		migrateExistingKeysToSecretStorage(app as never, defaultAppSetting);
+
+		expect(
+			app.secretStorage.getSecret(
+				"tasks-timeline-secret-voice-config-providers-openai-api-key"
+			)
+		).toBe("legacy-voice-secret");
+	});
+
+	it("does not restore legacy secrets over an intentionally cleared selector", () => {
+		const app = makeApp();
+		app.secretStorage.setSecret(
+			"tasks-timeline-ai-gemini-apikey",
+			"legacy-gemini-secret"
+		);
+		app.secretStorage.setSecret(
+			"tasks-timeline-secret-ai-config-providers-gemini-api-key",
+			""
+		);
+
+		migrateExistingKeysToSecretStorage(app as never, defaultAppSetting);
+
+		expect(
+			app.secretStorage.getSecret(
+				"tasks-timeline-secret-ai-config-providers-gemini-api-key"
+			)
+		).toBe("");
 	});
 });
