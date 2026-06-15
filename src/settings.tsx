@@ -1,4 +1,9 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import {
+	App,
+	PluginSettingTab,
+	SecretComponent,
+	Setting,
+} from "obsidian";
 import TasksTimelineObsidianPlugin from "./main";
 import { createRoot, Root as ReactRoot } from "react-dom/client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -7,17 +12,25 @@ import {
 	AppSettings,
 	cn,
 	CustomSettingsTab,
+	SecretFieldContext,
 	SettingsPage,
 } from "@tasks-timeline/components";
 import { unmountReactRoot } from "./view";
 import type { StatsData } from "./mcpStats";
 import type { SessionSummary } from "./mcpServer";
 import { getActiveWindow } from "./obsidianDom";
+import {
+	readSelectedSecret,
+	secretIdFromSelector,
+	secretSelectorKey,
+} from "./secretStorage";
+import type { SecretSelector, SecretSelectorMap } from "./secretStorage";
 
 export interface TasksTimelinePluginSettings {
 	appSetting: AppSettings;
 	systemInDarkMode: boolean;
 	_settingsVersion?: number;
+	secretSelectors: SecretSelectorMap;
 	mcpServer: {
 		enabled: boolean;
 		host: string;
@@ -28,7 +41,7 @@ export interface TasksTimelinePluginSettings {
 	};
 }
 
-export const CURRENT_SETTINGS_VERSION = 5;
+export const CURRENT_SETTINGS_VERSION = 6;
 
 export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 	appSetting: {
@@ -105,6 +118,7 @@ export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 	},
 	systemInDarkMode: false,
 	_settingsVersion: CURRENT_SETTINGS_VERSION,
+	secretSelectors: {},
 	mcpServer: {
 		enabled: false,
 		host: "127.0.0.1",
@@ -128,6 +142,7 @@ function SettingsPageWrapper({
 	availableTags,
 	inDarkMode,
 	customTabs,
+	renderSecretField,
 }: {
 	initialSettings: AppSettings;
 	onPersistSettings: (s: AppSettings) => void;
@@ -135,6 +150,7 @@ function SettingsPageWrapper({
 	availableTags: string[];
 	inDarkMode: boolean;
 	customTabs: CustomSettingsTab[];
+	renderSecretField: (context: SecretFieldContext) => React.ReactNode;
 }) {
 	const [settings, setSettings] = useState(initialSettings);
 
@@ -150,10 +166,80 @@ function SettingsPageWrapper({
 			availableCategories={availableCategories}
 			availableTags={availableTags}
 			onClose={undefined}
-			inSeperatePage
+			inSeperatePage={false}
 			inDarkMode={inDarkMode}
 			customTabs={customTabs}
+			renderSecretField={renderSecretField}
 		/>
+	);
+}
+
+function secretSelectorFromField(context: SecretFieldContext): SecretSelector {
+	const basePath =
+		context.scope === "ai"
+			? ["aiConfig", "providers", context.provider, "apiKey"]
+			: ["voiceConfig", "providers", context.provider, "apiKey"];
+	return { path: basePath };
+}
+
+function ObsidianSecretField({
+	context,
+	plugin,
+}: {
+	context: SecretFieldContext;
+	plugin: TasksTimelineObsidianPlugin;
+}) {
+	const containerRef = useRef<HTMLDivElement | null>(null);
+	const selector = secretSelectorFromField(context);
+	const selectorKey = secretSelectorKey(selector);
+	const selectedSecret =
+		plugin.settings.secretSelectors[selectorKey] ??
+		secretIdFromSelector(selector);
+
+	useEffect(() => {
+		const container = containerRef.current;
+		if (!container) {
+			return;
+		}
+
+		container.replaceChildren();
+		const component = new SecretComponent(plugin.app, container);
+		component.setValue(selectedSecret);
+		component.onChange((value) => {
+			plugin.settings.secretSelectors = {
+				...plugin.settings.secretSelectors,
+				[selectorKey]: value,
+			};
+			context.onChange(
+				readSelectedSecret(
+					plugin.app,
+					selector,
+					plugin.settings.secretSelectors,
+				) ?? "",
+			);
+		});
+
+		return () => {
+			const unload = (component as { unload?: unknown }).unload;
+			if (typeof unload === "function") {
+				unload.call(component);
+			}
+		};
+	}, [context, plugin, selectedSecret, selector, selectorKey]);
+
+	return (
+		<div className="space-y-1">
+			<div
+				id={context.id}
+				ref={containerRef}
+				className="tasks-timeline-secret-selector rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+			/>
+			{context.description && (
+				<p className="text-[10px] text-slate-400">
+					{context.description}
+				</p>
+			)}
+		</div>
 	);
 }
 
@@ -711,7 +797,11 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 		const styleEl = tagSettings.settingEl.ownerDocument.createElement("style");
 		styleEl.textContent = componentStyles;
 		const rootEl = tagSettings.settingEl.ownerDocument.createElement("div");
-		rootEl.className = "tasks-timeline-settings";
+		rootEl.className = "tasks-timeline-app tasks-timeline-settings";
+		rootEl.setAttribute(
+			"data-theme",
+			this.plugin.settings.systemInDarkMode ? "midnight" : "light",
+		);
 		shadowRoot.replaceChildren(styleEl, rootEl);
 
 		this.root = createRoot(rootEl);
@@ -728,6 +818,12 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 					availableTags={availableTags}
 					inDarkMode={this.plugin.settings.systemInDarkMode}
 					customTabs={[mcpTab]}
+					renderSecretField={(context) => (
+						<ObsidianSecretField
+							context={context}
+							plugin={this.plugin}
+						/>
+					)}
 				/>
 			</React.StrictMode>,
 		);

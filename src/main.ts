@@ -11,6 +11,7 @@ import { migrateSettings } from "./settingsMigration";
 import {
 	extractAndStoreSecrets,
 	migrateExistingKeysToSecretStorage,
+	normalizeSecretSelectors,
 	resolveSecrets,
 } from "./secretStorage";
 import { ObsidianMcpServer, type SessionSummary } from "./mcpServer";
@@ -126,12 +127,18 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 			raw?.appSetting,
 			DEFAULT_SETTINGS.appSetting,
 		);
+		const secretSelectors = normalizeSecretSelectors(
+			this.app,
+			appSetting,
+			raw?.secretSelectors,
+		);
 
 		this.settings = {
 			systemInDarkMode:
 				raw?.systemInDarkMode ?? DEFAULT_SETTINGS.systemInDarkMode,
 			appSetting,
 			_settingsVersion: raw?._settingsVersion,
+			secretSelectors,
 			mcpServer: {
 				...DEFAULT_SETTINGS.mcpServer,
 				...raw?.mcpServer,
@@ -146,6 +153,7 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 			this.settings.appSetting = migrateExistingKeysToSecretStorage(
 				this.app,
 				this.settings.appSetting,
+				this.settings.secretSelectors,
 			);
 			this.settings._settingsVersion = CURRENT_SETTINGS_VERSION;
 			await this.saveSettings({ clearMissingSecrets: false });
@@ -155,6 +163,7 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 		this.settings.appSetting = resolveSecrets(
 			this.app,
 			this.settings.appSetting,
+			this.settings.secretSelectors,
 		);
 	}
 
@@ -199,6 +208,7 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 			appSetting: extractAndStoreSecrets(
 				this.app,
 				this.settings.appSetting,
+				this.settings.secretSelectors,
 				options,
 			),
 		};
