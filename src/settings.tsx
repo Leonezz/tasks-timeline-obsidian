@@ -7,6 +7,7 @@ import TasksTimelineObsidianPlugin from "./main";
 import { createRoot, Root as ReactRoot } from "react-dom/client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import componentStyles from "@tasks-timeline/components/index.css?inline";
+import pluginStyles from "./styles.css?inline";
 import {
 	AppSettings,
 	cn,
@@ -721,7 +722,7 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 			tagSettings.settingEl.shadowRoot ??
 			tagSettings.settingEl.attachShadow({ mode: "open" });
 		const styleEl = tagSettings.settingEl.ownerDocument.createElement("style");
-		styleEl.textContent = componentStyles;
+		styleEl.textContent = `${componentStyles}\n${pluginStyles}`;
 		const rootEl = tagSettings.settingEl.ownerDocument.createElement("div");
 		rootEl.className = "tasks-timeline-app tasks-timeline-settings";
 		rootEl.setAttribute(

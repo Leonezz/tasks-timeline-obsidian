@@ -2,6 +2,7 @@ import { IconName, ItemView, WorkspaceLeaf } from "obsidian";
 import { createRoot, Root as ReactRoot } from "react-dom/client";
 import React, { Component, ErrorInfo, ReactNode } from "react";
 import componentStyles from "@tasks-timeline/components/index.css?inline";
+import pluginStyles from "./styles.css?inline";
 import TasksTimelineObsidianPlugin from "main";
 import { ObsidianAdaptor } from "./obsidianAdapter";
 
@@ -99,7 +100,7 @@ export class TasksTimelineObsidianView extends ItemView {
 		const shadowRoot =
 			host.shadowRoot ?? host.attachShadow({ mode: "open" });
 		const styleEl = host.ownerDocument.createElement("style");
-		styleEl.textContent = componentStyles;
+		styleEl.textContent = `${componentStyles}\n${pluginStyles}`;
 		const rootEl = host.ownerDocument.createElement("div");
 		rootEl.className = "tasks-timeline-app";
 		shadowRoot.replaceChildren(styleEl, rootEl);
