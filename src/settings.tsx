@@ -1,7 +1,6 @@
 import {
 	App,
 	PluginSettingTab,
-	Setting,
 } from "obsidian";
 import TasksTimelineObsidianPlugin from "./main";
 import { createRoot, Root as ReactRoot } from "react-dom/client";
@@ -629,6 +628,7 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		const container = containerEl;
 		container.empty();
+		container.scrollTop = 0;
 
 		// Collect available categories and tags from the vault's metadata cache
 		const markdownFiles = this.app.vault.getMarkdownFiles();
@@ -716,14 +716,14 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 			),
 		};
 
-		const tagSettings = new Setting(containerEl);
-		tagSettings.settingEl.addClass("tasks-timeline-settings-host");
+		const host = containerEl.createDiv({
+			cls: "tasks-timeline-settings-host",
+		});
 		const shadowRoot =
-			tagSettings.settingEl.shadowRoot ??
-			tagSettings.settingEl.attachShadow({ mode: "open" });
-		const styleEl = tagSettings.settingEl.ownerDocument.createElement("style");
+			host.shadowRoot ?? host.attachShadow({ mode: "open" });
+		const styleEl = host.ownerDocument.createElement("style");
 		styleEl.textContent = `${componentStyles}\n${pluginStyles}`;
-		const rootEl = tagSettings.settingEl.ownerDocument.createElement("div");
+		const rootEl = host.ownerDocument.createElement("div");
 		rootEl.className = "tasks-timeline-app tasks-timeline-settings";
 		rootEl.setAttribute(
 			"data-theme",
@@ -754,5 +754,9 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 				/>
 			</React.StrictMode>,
 		);
+
+		getActiveWindow(this.app).requestAnimationFrame(() => {
+			container.scrollTop = 0;
+		});
 	}
 }

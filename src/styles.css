@@ -1,6 +1,11 @@
-.tasks-timeline-view-host,
-.tasks-timeline-settings-host {
+.tasks-timeline-view-host {
 	height: 100%;
+	min-height: 0;
+}
+
+.tasks-timeline-settings-host {
+	display: block;
+	width: 100%;
 	min-height: 0;
 }
 
