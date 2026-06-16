@@ -8,7 +8,6 @@ import type { SecretFieldContext } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "./main";
 import {
 	readSelectedSecret,
-	secretIdFromSelector,
 	secretSelectorKey,
 } from "./secretStorage";
 import type { SecretSelector } from "./secretStorage";
@@ -43,9 +42,7 @@ export function ObsidianSecretField({
 }) {
 	const selector = useMemo(() => secretSelectorFromField(context), [context]);
 	const selectorKey = secretSelectorKey(selector);
-	const defaultSecretId = secretIdFromSelector(selector);
-	const selectedSecret =
-		plugin.settings.secretSelectors[selectorKey] ?? defaultSecretId;
+	const selectedSecret = plugin.settings.secretSelectors[selectorKey] ?? "";
 	const [secretIds, setSecretIds] = useState<string[]>([]);
 	const [customSecretId, setCustomSecretId] = useState("");
 	const [secretDraft, setSecretDraft] = useState("");
@@ -55,10 +52,12 @@ export function ObsidianSecretField({
 
 	const refreshSecretState = useCallback(() => {
 		const ids = plugin.app.secretStorage.listSecrets();
-		const secret = plugin.app.secretStorage.getSecret(selectedSecret);
-		setSecretIds(uniqueSorted([defaultSecretId, selectedSecret, ...ids]));
+		const secret = selectedSecret
+			? plugin.app.secretStorage.getSecret(selectedSecret)
+			: null;
+		setSecretIds(uniqueSorted([selectedSecret, ...ids]));
 		setHasStoredValue(secret !== null && secret.length > 0);
-	}, [defaultSecretId, plugin.app.secretStorage, selectedSecret]);
+	}, [plugin.app.secretStorage, selectedSecret]);
 
 	useEffect(() => {
 		refreshSecretState();
@@ -66,6 +65,16 @@ export function ObsidianSecretField({
 
 	const updateSelectedSecret = useCallback(
 		(secretId: string) => {
+			if (!secretId) {
+				const nextSelectors = { ...plugin.settings.secretSelectors };
+				delete nextSelectors[selectorKey];
+				plugin.settings.secretSelectors = nextSelectors;
+				context.onChange("");
+				setErrorText("");
+				setStatusText("No secret selector selected.");
+				return;
+			}
+
 			if (!isValidSecretId(secretId)) {
 				setErrorText(
 					"Secret names can use lowercase letters, numbers, and dashes.",
@@ -99,8 +108,12 @@ export function ObsidianSecretField({
 	};
 
 	const handleSaveSecret = () => {
+		if (!selectedSecret) {
+			setErrorText("Choose or enter a secret selector first.");
+			return;
+		}
 		if (!isValidSecretId(selectedSecret)) {
-			setErrorText("Choose a valid secret selector first.");
+			setErrorText("Choose or enter a valid secret selector first.");
 			return;
 		}
 		if (secretDraft.length === 0) {
@@ -117,14 +130,15 @@ export function ObsidianSecretField({
 	};
 
 	const options = uniqueSorted([
-		defaultSecretId,
 		selectedSecret,
 		...secretIds,
 	]);
-	const selectedLabel =
-		selectedSecret === defaultSecretId
-			? `${selectedSecret} (default)`
-			: selectedSecret;
+	const selectedLabel = selectedSecret || "No selector selected";
+	const statusLabel = selectedSecret
+		? hasStoredValue
+			? "Stored"
+			: "Empty"
+		: "Unset";
 
 	return (
 		<div className="tasks-timeline-secret-field-stack">
@@ -139,7 +153,9 @@ export function ObsidianSecretField({
 							{selectedLabel}
 						</p>
 						<p className="tasks-timeline-secret-field__hint">
-							{hasStoredValue
+							{!selectedSecret
+								? "Choose an existing Obsidian secret or enter a custom selector."
+								: hasStoredValue
 								? "A value is stored for this selector."
 								: "No value is stored for this selector yet."}
 						</p>
@@ -152,7 +168,7 @@ export function ObsidianSecretField({
 								: "tasks-timeline-secret-field__status--empty",
 						].join(" ")}
 					>
-						{hasStoredValue ? "Stored" : "Empty"}
+						{statusLabel}
 					</span>
 				</div>
 
@@ -170,11 +186,10 @@ export function ObsidianSecretField({
 					}
 					className="tasks-timeline-secret-field__control"
 				>
+					<option value="">Choose a secret...</option>
 					{options.map((secretId) => (
 						<option key={secretId} value={secretId}>
-							{secretId === defaultSecretId
-								? `${secretId} (default)`
-								: secretId}
+							{secretId}
 						</option>
 					))}
 				</select>

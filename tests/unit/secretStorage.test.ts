@@ -3,13 +3,9 @@ import { App } from "../mocks/obsidian";
 import {
 	resolveSecrets,
 	extractAndStoreSecrets,
-	migrateExistingKeysToSecretStorage,
 	emitSecretSelectors,
-	defaultSecretSelectors,
 	normalizeSecretSelectors,
-	secretIdFromSelector,
 	secretSelectorKey,
-	writeSecret,
 } from "../../src/secretStorage";
 
 const defaultAppSetting: AppSettings = {
@@ -60,6 +56,15 @@ const defaultAppSetting: AppSettings = {
 		direction: "asc",
 		field: "createdAt",
 	},
+};
+
+const selectedSecrets = {
+	"aiConfig.providers.gemini.apiKey": "selected-gemini-key",
+	"aiConfig.providers.anthropic.apiKey": "selected-anthropic-key",
+	"aiConfig.providers.openai.apiKey": "selected-openai-key",
+	"aiConfig.providers.openai-compatible.apiKey": "selected-compatible-key",
+	"voiceConfig.providers.openai.apiKey": "selected-voice-openai-key",
+	"voiceConfig.providers.gemini.apiKey": "selected-voice-gemini-key",
 };
 
 function makeApp(): App {
@@ -113,71 +118,61 @@ describe("secret selectors", () => {
 		]);
 	});
 
-	it("derives SecretStorage IDs from selectors", () => {
-		const [selector] = emitSecretSelectors(defaultAppSetting);
+	it("does not create default SecretStorage IDs for emitted selectors", () => {
+		const app = makeApp();
+		const selectors = normalizeSecretSelectors(app as never, defaultAppSetting);
 
-		expect(secretIdFromSelector(selector)).toBe(
-			"tasks-timeline-secret-ai-config-providers-gemini-api-key"
-		);
-	});
-
-	it("keeps generated SecretStorage IDs valid for Obsidian", () => {
-		const ids = emitSecretSelectors(defaultAppSetting).map((selector) =>
-			secretIdFromSelector(selector)
-		);
-
-		for (const id of ids) {
-			expect(id).toMatch(/^[a-z0-9-]+$/);
-			expect(id.length).toBeLessThanOrEqual(64);
-		}
-
-		const openAiCompatibleId = secretIdFromSelector({
-			path: ["aiConfig", "providers", "openai-compatible", "apiKey"],
-		});
-		expect(openAiCompatibleId).not.toBe(
-			"tasks-timeline-secret-ai-config-providers-openai-compatible-api-key"
-		);
+		expect(selectors).toEqual({});
+		expect(app.secretStorage.listSecrets()).toEqual([]);
 	});
 });
 
 describe("extractAndStoreSecrets + resolveSecrets round-trip", () => {
-	it("extracts keys to SecretStorage and resolves them back", () => {
+	it("stores keys only under host-selected secret names", () => {
 		const app = makeApp();
 		const settings = makeSettingsWithKeys();
-		const selectors = defaultSecretSelectors(settings);
-		const selectorByPath = Object.fromEntries(
-			emitSecretSelectors(settings).map((selector) => [
-				secretSelectorKey(selector),
-				secretIdFromSelector(selector),
-			])
+
+		const cleaned = extractAndStoreSecrets(
+			app as never,
+			settings,
+			selectedSecrets
 		);
 
-		const cleaned = extractAndStoreSecrets(app as never, settings, selectors);
 		expect(cleaned.aiConfig.providers.gemini.apiKey).toBe(
-			selectorByPath["aiConfig.providers.gemini.apiKey"]
+			selectedSecrets["aiConfig.providers.gemini.apiKey"]
 		);
 		expect(cleaned.aiConfig.providers.anthropic.apiKey).toBe(
-			selectorByPath["aiConfig.providers.anthropic.apiKey"]
+			selectedSecrets["aiConfig.providers.anthropic.apiKey"]
 		);
 		expect(cleaned.aiConfig.providers["openai-compatible"].apiKey).toBe(
-			selectorByPath["aiConfig.providers.openai-compatible.apiKey"]
+			selectedSecrets["aiConfig.providers.openai-compatible.apiKey"]
 		);
 		expect(cleaned.voiceConfig.providers.openai.apiKey).toBe(
-			selectorByPath["voiceConfig.providers.openai.apiKey"]
+			selectedSecrets["voiceConfig.providers.openai.apiKey"]
 		);
 		expect(cleaned.voiceConfig.providers.gemini.apiKey).toBe(
-			selectorByPath["voiceConfig.providers.gemini.apiKey"]
+			selectedSecrets["voiceConfig.providers.gemini.apiKey"]
 		);
 		expect(cleaned.aiConfig.providers.openai.apiKey).toBe(
-			selectorByPath["aiConfig.providers.openai.apiKey"]
+			selectedSecrets["aiConfig.providers.openai.apiKey"]
 		);
 
-		// Non-key fields preserved
 		expect(
 			cleaned.aiConfig.providers["openai-compatible"].baseUrl
 		).toBe("https://custom.api");
 
-		const resolved = resolveSecrets(app as never, cleaned, selectors);
+		expect(
+			app.secretStorage.getSecret(
+				selectedSecrets["aiConfig.providers.gemini.apiKey"]
+			)
+		).toBe("gemini-secret");
+		expect(
+			app.secretStorage.getSecret(
+				selectedSecrets["aiConfig.providers.openai.apiKey"]
+			)
+		).toBe("");
+
+		const resolved = resolveSecrets(app as never, cleaned, selectedSecrets);
 		expect(resolved.aiConfig.providers.gemini.apiKey).toBe("gemini-secret");
 		expect(resolved.aiConfig.providers.anthropic.apiKey).toBe(
 			"anthropic-secret"
@@ -194,40 +189,24 @@ describe("extractAndStoreSecrets + resolveSecrets round-trip", () => {
 		expect(resolved.aiConfig.providers.openai.apiKey).toBe("");
 	});
 
-	it("handles partial keys (only some providers have keys)", () => {
-		const app = makeApp();
-		const settings: AppSettings = {
-			...defaultAppSetting,
-			aiConfig: {
-				...defaultAppSetting.aiConfig,
-				providers: {
-					gemini: { apiKey: "only-gemini", baseUrl: "", model: "" },
-					anthropic: { apiKey: "", baseUrl: "", model: "" },
-					openai: { apiKey: "", baseUrl: "", model: "" },
-					"openai-compatible": { apiKey: "", baseUrl: "", model: "" },
-				},
-			},
-		};
-
-		const selectors = defaultSecretSelectors(settings);
-		const cleaned = extractAndStoreSecrets(app as never, settings, selectors);
-		expect(cleaned.aiConfig.providers.gemini.apiKey).toBe(
-			selectors["aiConfig.providers.gemini.apiKey"]
-		);
-
-		const resolved = resolveSecrets(app as never, cleaned, selectors);
-		expect(resolved.aiConfig.providers.gemini.apiKey).toBe("only-gemini");
-		expect(resolved.aiConfig.providers.anthropic.apiKey).toBe("");
-	});
-
-	it("overwrites stored secrets with blanks when keys are cleared", () => {
+	it("does not write secrets when no selector was selected", () => {
 		const app = makeApp();
 		const settings = makeSettingsWithKeys();
-		const [selector] = emitSecretSelectors(settings);
-		const selectors = defaultSecretSelectors(settings);
 
-		writeSecret(app as never, selector, "stored-before-clear");
+		const cleaned = extractAndStoreSecrets(app as never, settings, {});
 
+		expect(cleaned.aiConfig.providers.gemini.apiKey).toBe("");
+		expect(cleaned.aiConfig.providers.anthropic.apiKey).toBe("");
+		expect(cleaned.aiConfig.providers["openai-compatible"].apiKey).toBe("");
+		expect(cleaned.voiceConfig.providers.openai.apiKey).toBe("");
+		expect(cleaned.voiceConfig.providers.gemini.apiKey).toBe("");
+		expect(app.secretStorage.listSecrets()).toEqual([]);
+	});
+
+	it("overwrites stored secrets with blanks when selected keys are cleared", () => {
+		const app = makeApp();
+		app.secretStorage.setSecret("selected-gemini-key", "stored-before-clear");
+		const settings = makeSettingsWithKeys();
 		const cleared = {
 			...settings,
 			aiConfig: {
@@ -242,30 +221,27 @@ describe("extractAndStoreSecrets + resolveSecrets round-trip", () => {
 			},
 		};
 
-		extractAndStoreSecrets(app as never, cleared, selectors);
-		expect(app.secretStorage.getSecret(secretIdFromSelector(selector))).toBe("");
+		extractAndStoreSecrets(app as never, cleared, {
+			"aiConfig.providers.gemini.apiKey": "selected-gemini-key",
+		});
+
+		expect(app.secretStorage.getSecret("selected-gemini-key")).toBe("");
 	});
 
-	it("stores keys under host-selected secret names", () => {
+	it("resolves missing selectors to blank runtime keys", () => {
 		const app = makeApp();
-		const settings = makeSettingsWithKeys();
-		const selectors = {
-			...defaultSecretSelectors(settings),
-			"aiConfig.providers.gemini.apiKey": "shared-gemini-key",
-		};
+		app.secretStorage.setSecret("selected-gemini-key", "gemini-secret");
 
-		const cleaned = extractAndStoreSecrets(app as never, settings, selectors);
+		const resolved = resolveSecrets(app as never, defaultAppSetting, {
+			"aiConfig.providers.gemini.apiKey": "selected-gemini-key",
+		});
 
-		expect(cleaned.aiConfig.providers.gemini.apiKey).toBe("shared-gemini-key");
-		expect(app.secretStorage.getSecret("shared-gemini-key")).toBe(
-			"gemini-secret"
-		);
-		expect(
-			resolveSecrets(app as never, cleaned, selectors).aiConfig.providers.gemini
-				.apiKey
-		).toBe("gemini-secret");
+		expect(resolved.aiConfig.providers.gemini.apiKey).toBe("gemini-secret");
+		expect(resolved.aiConfig.providers.anthropic.apiKey).toBe("");
 	});
+});
 
+describe("normalizeSecretSelectors", () => {
 	it("normalizes selectors from saved settings fields", () => {
 		const app = makeApp();
 		app.secretStorage.setSecret("shared-openai-key", "openai-secret");
@@ -294,113 +270,54 @@ describe("extractAndStoreSecrets + resolveSecrets round-trip", () => {
 		).toBe("openai-secret");
 	});
 
-	it("normalizes invalid saved selector names back to generated IDs", () => {
+	it("keeps explicit saved selector names without generating fallbacks", () => {
+		const app = makeApp();
+		app.secretStorage.setSecret(
+			"tasks-timeline-ai-anthropic-apikey",
+			"saved-secret"
+		);
+
+		const selectors = normalizeSecretSelectors(app as never, defaultAppSetting, {
+			"aiConfig.providers.anthropic.apiKey":
+				"tasks-timeline-ai-anthropic-apikey",
+		});
+
+		expect(selectors).toEqual({
+			"aiConfig.providers.anthropic.apiKey":
+				"tasks-timeline-ai-anthropic-apikey",
+		});
+		expect(
+			resolveSecrets(app as never, defaultAppSetting, selectors).aiConfig
+				.providers.anthropic.apiKey
+		).toBe("saved-secret");
+	});
+
+	it("ignores invalid saved selector names instead of generating replacements", () => {
 		const app = makeApp();
 		const selectors = normalizeSecretSelectors(app as never, defaultAppSetting, {
 			"aiConfig.providers.openai-compatible.apiKey":
-				"tasks-timeline-secret-ai-config-providers-openai-compatible-api-key",
-		});
-		const generated = secretIdFromSelector({
-			path: ["aiConfig", "providers", "openai-compatible", "apiKey"],
+				"tasks_timeline_secret_ai_config_providers_openai_compatible_api_key",
 		});
 
-		expect(selectors["aiConfig.providers.openai-compatible.apiKey"]).toBe(
-			generated
-		);
-		expect(generated.length).toBeLessThanOrEqual(64);
+		expect(selectors).toEqual({});
+	});
+
+	it("ignores selectors for fields that are no longer emitted", () => {
+		const app = makeApp();
+		const selectors = normalizeSecretSelectors(app as never, defaultAppSetting, {
+			"removed.provider.apiKey": "removed-provider-key",
+		});
+
+		expect(selectors).toEqual({});
 	});
 });
 
-describe("migrateExistingKeysToSecretStorage", () => {
-	it("is equivalent to extractAndStoreSecrets", () => {
-		const app = makeApp();
-		const settings = makeSettingsWithKeys();
-		const selectors = defaultSecretSelectors(settings);
+describe("secretSelectorKey", () => {
+	it("uses settings paths as stable selector keys", () => {
+		const [selector] = emitSecretSelectors(defaultAppSetting);
 
-		const result = migrateExistingKeysToSecretStorage(
-			app as never,
-			settings,
-			selectors
+		expect(secretSelectorKey(selector)).toBe(
+			"aiConfig.providers.gemini.apiKey"
 		);
-		expect(result.aiConfig.providers.gemini.apiKey).toBe(
-			selectors["aiConfig.providers.gemini.apiKey"]
-		);
-
-		expect(
-			app.secretStorage.getSecret(
-				"tasks-timeline-secret-ai-config-providers-gemini-api-key"
-			)
-		).toBe(
-			"gemini-secret"
-		);
-	});
-
-	it("migrates legacy pattern IDs into selector IDs", () => {
-		const app = makeApp();
-		app.secretStorage.setSecret(
-			"tasks-timeline-ai-openai-compatible-apikey",
-			"legacy-compatible-secret"
-		);
-		const selector = {
-			path: ["aiConfig", "providers", "openai-compatible", "apiKey"],
-		};
-		const generatedId = secretIdFromSelector(selector);
-
-		const result = migrateExistingKeysToSecretStorage(
-			app as never,
-			defaultAppSetting,
-			defaultSecretSelectors(defaultAppSetting)
-		);
-
-		expect(result.aiConfig.providers["openai-compatible"].apiKey).toBe(
-			generatedId
-		);
-		expect(app.secretStorage.getSecret(generatedId)).toBe(
-			"legacy-compatible-secret"
-		);
-	});
-
-	it("does not clear migrated secrets when plaintext keys are missing", () => {
-		const app = makeApp();
-		app.secretStorage.setSecret(
-			"tasks-timeline-voice-openai-apikey",
-			"legacy-voice-secret"
-		);
-
-		migrateExistingKeysToSecretStorage(
-			app as never,
-			defaultAppSetting,
-			defaultSecretSelectors(defaultAppSetting)
-		);
-
-		expect(
-			app.secretStorage.getSecret(
-				"tasks-timeline-secret-voice-config-providers-openai-api-key"
-			)
-		).toBe("legacy-voice-secret");
-	});
-
-	it("does not restore legacy secrets over an intentionally cleared selector", () => {
-		const app = makeApp();
-		app.secretStorage.setSecret(
-			"tasks-timeline-ai-gemini-apikey",
-			"legacy-gemini-secret"
-		);
-		app.secretStorage.setSecret(
-			"tasks-timeline-secret-ai-config-providers-gemini-api-key",
-			""
-		);
-
-		migrateExistingKeysToSecretStorage(
-			app as never,
-			defaultAppSetting,
-			defaultSecretSelectors(defaultAppSetting)
-		);
-
-		expect(
-			app.secretStorage.getSecret(
-				"tasks-timeline-secret-ai-config-providers-gemini-api-key"
-			)
-		).toBe("");
 	});
 });

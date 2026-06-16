@@ -1,6 +1,5 @@
 import { Notice, Plugin } from "obsidian";
 import {
-	CURRENT_SETTINGS_VERSION,
 	DEFAULT_SETTINGS,
 	TasksTimelinePluginSettings as TasksTimelineObsidianPluginSettings,
 	TasksTimelineSettingTab,
@@ -10,7 +9,6 @@ import { Events, TypedBus } from "./eventbus";
 import { migrateSettings } from "./settingsMigration";
 import {
 	extractAndStoreSecrets,
-	migrateExistingKeysToSecretStorage,
 	normalizeSecretSelectors,
 	resolveSecrets,
 } from "./secretStorage";
@@ -144,20 +142,6 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 				...raw?.mcpServer,
 			},
 		};
-
-		// One-time migration: move plaintext keys to SecretStorage
-		if (
-			this.settings._settingsVersion === undefined ||
-			this.settings._settingsVersion < CURRENT_SETTINGS_VERSION
-		) {
-			this.settings.appSetting = migrateExistingKeysToSecretStorage(
-				this.app,
-				this.settings.appSetting,
-				this.settings.secretSelectors,
-			);
-			this.settings._settingsVersion = CURRENT_SETTINGS_VERSION;
-			await this.saveSettings({ clearMissingSecrets: false });
-		}
 
 		// Always keep secrets resolved in memory
 		this.settings.appSetting = resolveSecrets(

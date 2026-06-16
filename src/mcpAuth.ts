@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
 import type { App } from "obsidian";
 import {
-	MCP_AUTH_TOKEN_SECRET_SELECTOR,
-	readSecret,
-	writeSecret,
+	MCP_AUTH_TOKEN_SECRET_ID,
+	readSecretById,
+	writeSecretById,
 } from "./secretStorage";
 
 /**
@@ -29,7 +29,7 @@ export class McpAuthManager {
 			return this.cachedToken;
 		}
 
-		const stored = readSecret(this.app, MCP_AUTH_TOKEN_SECRET_SELECTOR);
+		const stored = readSecretById(this.app, MCP_AUTH_TOKEN_SECRET_ID);
 		if (stored) {
 			this.cachedToken = stored;
 			return stored;
@@ -72,6 +72,6 @@ export class McpAuthManager {
 
 	private async storeToken(token: string): Promise<void> {
 		this.cachedToken = token;
-		writeSecret(this.app, MCP_AUTH_TOKEN_SECRET_SELECTOR, token);
+		writeSecretById(this.app, MCP_AUTH_TOKEN_SECRET_ID, token);
 	}
 }
