@@ -9,97 +9,32 @@
 	gap: 0.375rem;
 }
 
-.tasks-timeline-secret-field {
-	padding: 0.75rem;
-	border: 1px solid rgb(226 232 240);
-	border-radius: 0.75rem;
-	background: rgba(255, 255, 255, 0.94);
-	box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04),
-		0 8px 24px rgba(15, 23, 42, 0.04);
-	color: rgb(51 65 85);
-	font-size: 0.75rem;
-}
-
-.tasks-timeline-secret-field__header {
-	display: flex;
-	align-items: flex-start;
-	justify-content: space-between;
-	gap: 0.75rem;
-}
-
-.tasks-timeline-secret-field__identity {
-	min-width: 0;
+.tasks-timeline-secret-select {
 	display: grid;
-	gap: 0.125rem;
+	gap: 0.25rem;
 }
 
-.tasks-timeline-secret-field__eyebrow,
-.tasks-timeline-secret-field__label {
+.tasks-timeline-secret-select__label {
 	margin: 0;
-	color: rgb(148 163 184);
+	color: rgb(100 116 139);
 	font-size: 0.625rem;
 	font-weight: 800;
-	letter-spacing: 0.12em;
+	letter-spacing: 0.08em;
 	line-height: 1.2;
 	text-transform: uppercase;
 }
 
-.tasks-timeline-secret-field__label {
-	display: block;
-	margin-top: 0.75rem;
-}
-
-.tasks-timeline-secret-field__name {
+.tasks-timeline-secret-select__control {
+	width: 100%;
 	min-width: 0;
-	margin: 0;
-	overflow: hidden;
-	color: rgb(51 65 85);
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-		"Liberation Mono", "Courier New", monospace;
-	font-size: 0.6875rem;
-	font-weight: 700;
-	line-height: 1.35;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.tasks-timeline-secret-field__hint,
-.tasks-timeline-secret-field__description,
-.tasks-timeline-secret-field__message {
-	margin: 0;
-	color: rgb(148 163 184);
-	font-size: 0.625rem;
-	line-height: 1.4;
-}
-
-.tasks-timeline-secret-field__status {
-	flex: 0 0 auto;
-	padding: 0.25rem 0.5rem;
-	border-radius: 999px;
-	font-size: 0.625rem;
-	font-weight: 800;
-	letter-spacing: 0.08em;
-	line-height: 1;
-	text-transform: uppercase;
-}
-
-.tasks-timeline-secret-field__status--stored {
-	background: rgb(236 253 245);
-	box-shadow: inset 0 0 0 1px rgb(167 243 208);
-	color: rgb(4 120 87);
-}
-
-.tasks-timeline-secret-field__status--empty {
+	height: 2.375rem;
+	padding: 0 0.75rem;
+	border: 1px solid rgb(226 232 240);
+	border-radius: 0.5rem;
 	background: rgb(248 250 252);
-	box-shadow: inset 0 0 0 1px rgb(226 232 240);
-	color: rgb(100 116 139);
-}
-
-.tasks-timeline-secret-field__control,
-.tasks-timeline-secret-field__button {
-	height: 2.25rem;
-	border-radius: 0.625rem;
-	font-size: 0.75rem;
+	color: rgb(51 65 85);
+	font-size: 0.8125rem;
+	font-weight: 600;
 	line-height: 1.2;
 	outline: none;
 	transition:
@@ -109,135 +44,91 @@
 		color 140ms ease;
 }
 
-.tasks-timeline-secret-field__control {
-	width: 100%;
-	min-width: 0;
-	margin-top: 0.25rem;
-	padding: 0 0.625rem;
-	border: 1px solid rgb(226 232 240);
-	background: rgb(248 250 252);
-	color: rgb(51 65 85);
-	font-weight: 600;
-}
-
-.tasks-timeline-secret-field__control::placeholder {
-	color: rgb(203 213 225);
-}
-
-.tasks-timeline-secret-field__control:focus {
-	border-color: rgb(96 165 250);
+.tasks-timeline-secret-select__control:focus {
+	border-color: rgb(59 130 246);
 	background: rgb(255 255 255);
 	box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.28);
 }
 
-.tasks-timeline-secret-field__control--mono {
-	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-		"Liberation Mono", "Courier New", monospace;
+.tasks-timeline-secret-select__hint,
+.tasks-timeline-secret-select__description {
+	margin: 0;
+	color: rgb(148 163 184);
+	font-size: 0.625rem;
+	line-height: 1.4;
 }
 
-.tasks-timeline-secret-field__row {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
-	gap: 0.5rem;
-	margin-top: 0.5rem;
+.tasks-timeline-app[data-theme="dark"] .tasks-timeline-secret-select__label,
+.tasks-timeline-app[data-theme="midnight"] .tasks-timeline-secret-select__label,
+.tasks-timeline-app[data-theme="coffee"] .tasks-timeline-secret-select__label {
+	color: rgb(148 163 184);
 }
 
-.tasks-timeline-secret-field__button {
-	min-width: max-content;
-	padding: 0 0.75rem;
-	border: 1px solid transparent;
-	font-weight: 800;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	cursor: pointer;
-}
-
-.tasks-timeline-secret-field__button--secondary {
-	border-color: rgb(226 232 240);
-	background: rgb(255 255 255);
-	color: rgb(71 85 105);
-}
-
-.tasks-timeline-secret-field__button--secondary:hover {
-	border-color: rgb(191 219 254);
-	background: rgb(239 246 255);
-	color: rgb(29 78 216);
-}
-
-.tasks-timeline-secret-field__button--primary {
-	background: rgb(15 23 42);
-	color: rgb(255 255 255);
-	box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
-}
-
-.tasks-timeline-secret-field__button--primary:hover {
-	background: rgb(37 99 235);
-}
-
-.tasks-timeline-secret-field__button:disabled {
-	cursor: not-allowed;
-	opacity: 0.48;
-}
-
-.tasks-timeline-secret-field__message {
-	margin-top: 0.5rem;
-}
-
-.tasks-timeline-secret-field__message--error {
-	color: rgb(225 29 72);
-}
-
-.tasks-timeline-app[data-theme="dark"] .tasks-timeline-secret-field,
-.tasks-timeline-app[data-theme="midnight"] .tasks-timeline-secret-field,
-.tasks-timeline-app[data-theme="coffee"] .tasks-timeline-secret-field {
-	border-color: rgba(71, 85, 105, 0.8);
-	background: rgba(15, 23, 42, 0.78);
-	box-shadow: none;
-	color: rgb(226 232 240);
-}
-
-.tasks-timeline-app[data-theme="dark"] .tasks-timeline-secret-field__name,
-.tasks-timeline-app[data-theme="midnight"] .tasks-timeline-secret-field__name,
-.tasks-timeline-app[data-theme="coffee"] .tasks-timeline-secret-field__name {
-	color: rgb(226 232 240);
-}
-
-.tasks-timeline-app[data-theme="dark"] .tasks-timeline-secret-field__control,
-.tasks-timeline-app[data-theme="midnight"] .tasks-timeline-secret-field__control,
-.tasks-timeline-app[data-theme="coffee"] .tasks-timeline-secret-field__control {
+.tasks-timeline-app[data-theme="dark"] .tasks-timeline-secret-select__control,
+.tasks-timeline-app[data-theme="midnight"] .tasks-timeline-secret-select__control,
+.tasks-timeline-app[data-theme="coffee"] .tasks-timeline-secret-select__control {
 	border-color: rgb(51 65 85);
 	background: rgb(2 6 23);
 	color: rgb(226 232 240);
 }
 
-.tasks-timeline-app[data-theme="dark"]
-	.tasks-timeline-secret-field__control:focus,
-.tasks-timeline-app[data-theme="midnight"]
-	.tasks-timeline-secret-field__control:focus,
-.tasks-timeline-app[data-theme="coffee"]
-	.tasks-timeline-secret-field__control:focus {
+.tasks-timeline-app[data-theme="dark"] .tasks-timeline-secret-select__control:focus,
+.tasks-timeline-app[data-theme="midnight"] .tasks-timeline-secret-select__control:focus,
+.tasks-timeline-app[data-theme="coffee"] .tasks-timeline-secret-select__control:focus {
 	border-color: rgb(96 165 250);
 	background: rgb(15 23 42);
 	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.22);
 }
 
-.tasks-timeline-app[data-theme="dark"]
-	.tasks-timeline-secret-field__button--secondary,
-.tasks-timeline-app[data-theme="midnight"]
-	.tasks-timeline-secret-field__button--secondary,
-.tasks-timeline-app[data-theme="coffee"]
-	.tasks-timeline-secret-field__button--secondary {
-	border-color: rgb(51 65 85);
-	background: rgb(2 6 23);
-	color: rgb(203 213 225);
+.tasks-timeline-settings {
+	--tt-settings-border: rgb(226 232 240);
+	--tt-settings-border-strong: rgb(59 130 246);
+	--tt-settings-bg: rgb(255 255 255);
+	--tt-settings-bg-muted: rgb(248 250 252);
+	--tt-settings-text: rgb(51 65 85);
+	--tt-settings-text-muted: rgb(100 116 139);
 }
 
-.tasks-timeline-app[data-theme="dark"]
-	.tasks-timeline-secret-field__button--primary,
-.tasks-timeline-app[data-theme="midnight"]
-	.tasks-timeline-secret-field__button--primary,
-.tasks-timeline-app[data-theme="coffee"]
-	.tasks-timeline-secret-field__button--primary {
-	background: rgb(226 232 240);
-	color: rgb(15 23 42);
+.tasks-timeline-settings :where(.border, .border-2, .border-t, .border-b, .border-l, .border-r, .border-x, .border-y) {
+	border-color: var(--tt-settings-border) !important;
+}
+
+.tasks-timeline-settings :where(button, input, select, textarea) {
+	color: var(--tt-settings-text);
+}
+
+.tasks-timeline-settings :where(input, select, textarea) {
+	border-color: var(--tt-settings-border) !important;
+	background-color: var(--tt-settings-bg-muted) !important;
+}
+
+.tasks-timeline-settings :where(.border-blue-500, .focus\:border-blue-500:focus) {
+	border-color: var(--tt-settings-border-strong) !important;
+}
+
+.tasks-timeline-settings :where(.text-slate-600, .text-slate-700) {
+	color: var(--tt-settings-text) !important;
+}
+
+.tasks-timeline-settings :where(.text-slate-400, .text-slate-500) {
+	color: var(--tt-settings-text-muted) !important;
+}
+
+.tasks-timeline-settings :where(.bg-white) {
+	background-color: var(--tt-settings-bg) !important;
+}
+
+.tasks-timeline-settings :where(.bg-slate-50) {
+	background-color: var(--tt-settings-bg-muted) !important;
+}
+
+.tasks-timeline-settings[data-theme="dark"],
+.tasks-timeline-settings[data-theme="midnight"],
+.tasks-timeline-settings[data-theme="coffee"] {
+	--tt-settings-border: rgb(51 65 85);
+	--tt-settings-border-strong: rgb(96 165 250);
+	--tt-settings-bg: rgb(15 23 42);
+	--tt-settings-bg-muted: rgb(2 6 23);
+	--tt-settings-text: rgb(226 232 240);
+	--tt-settings-text-muted: rgb(148 163 184);
 }

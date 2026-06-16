@@ -1,6 +1,6 @@
 {
 	"name": "tasks-timeline-obsidian",
-	"version": "0.2.8",
+	"version": "0.2.9",
 	"description": "View and manage vault tasks on a timeline.",
 	"main": "dist/main.js",
 	"type": "module",
