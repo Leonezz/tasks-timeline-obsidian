@@ -95,7 +95,7 @@
 }
 
 .tasks-timeline-settings :where(.border, .border-2, .border-t, .border-b, .border-l, .border-r, .border-x, .border-y) {
-	border-color: var(--tt-settings-border) !important;
+	border-color: var(--tt-settings-border);
 }
 
 .tasks-timeline-settings :where(button, input, select, textarea) {
@@ -103,28 +103,31 @@
 }
 
 .tasks-timeline-settings :where(input, select, textarea) {
-	border-color: var(--tt-settings-border) !important;
-	background-color: var(--tt-settings-bg-muted) !important;
+	border-color: var(--tt-settings-border);
+	background-color: var(--tt-settings-bg-muted);
 }
 
-.tasks-timeline-settings :where(.border-blue-500, .focus\:border-blue-500:focus) {
-	border-color: var(--tt-settings-border-strong) !important;
+.tasks-timeline-settings .border-blue-500,
+.tasks-timeline-settings .focus\:border-blue-500:focus {
+	border-color: var(--tt-settings-border-strong);
 }
 
-.tasks-timeline-settings :where(.text-slate-600, .text-slate-700) {
-	color: var(--tt-settings-text) !important;
+.tasks-timeline-settings .text-slate-600,
+.tasks-timeline-settings .text-slate-700 {
+	color: var(--tt-settings-text);
 }
 
-.tasks-timeline-settings :where(.text-slate-400, .text-slate-500) {
-	color: var(--tt-settings-text-muted) !important;
+.tasks-timeline-settings .text-slate-400,
+.tasks-timeline-settings .text-slate-500 {
+	color: var(--tt-settings-text-muted);
 }
 
-.tasks-timeline-settings :where(.bg-white) {
-	background-color: var(--tt-settings-bg) !important;
+.tasks-timeline-settings .bg-white {
+	background-color: var(--tt-settings-bg);
 }
 
-.tasks-timeline-settings :where(.bg-slate-50) {
-	background-color: var(--tt-settings-bg-muted) !important;
+.tasks-timeline-settings .bg-slate-50 {
+	background-color: var(--tt-settings-bg-muted);
 }
 
 .tasks-timeline-settings[data-theme="dark"],

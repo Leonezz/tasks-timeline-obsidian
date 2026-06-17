@@ -1,6 +1,6 @@
 {
 	"name": "tasks-timeline-obsidian",
-	"version": "0.2.13",
+	"version": "0.2.14",
 	"description": "View and manage vault tasks on a timeline.",
 	"main": "dist/main.js",
 	"type": "module",
@@ -36,10 +36,9 @@
 		"@types/parsimmon": "^1.10.9",
 		"@types/react": "^18.3.27",
 		"@types/react-dom": "^18.3.7",
-		"builtin-modules": "^5.0.0",
 		"esbuild": "0.25.5",
 		"eslint": "^9.39.3",
-		"eslint-plugin-obsidianmd": "0.1.9",
+		"eslint-plugin-obsidianmd": "0.3.0",
 		"globals": "14.0.0",
 		"jest": "^30.2.0",
 		"jest-environment-jsdom": "^30.2.0",
@@ -54,7 +53,6 @@
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.27.1",
 		"@tasks-timeline/components": "0.4.24",
-		"emoji-regex": "^10.6.0",
 		"luxon": "^3.7.2",
 		"parsimmon": "^1.18.1",
 		"react": "18.3.1",

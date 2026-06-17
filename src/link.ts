@@ -1,6 +1,4 @@
 import { LinkCache, SectionCache } from "obsidian";
-import emojiRegex from "emoji-regex";
-import * as P from "parsimmon";
 
 /** Get the "title" for a file, by stripping other parts of the path as well as the extension. */
 export function getFileTitle(path: string): string {
@@ -9,23 +7,23 @@ export function getFileTitle(path: string): string {
 	return path;
 }
 
-const HEADER_CANONICALIZER: P.Parser<string> = P.alt(
-	P.regex(new RegExp(emojiRegex(), "")),
-	P.regex(/[0-9\p{Letter}_-]+/u),
-	P.whitespace.map((_) => " "),
-	P.any.map((_) => " ")
-)
-	.many()
-	.map((result) => {
-		return result.join("").split(/\s+/).join(" ").trim();
-	});
+const HEADER_TOKEN_REGEX = /^[\p{Letter}\p{Number}_-]$/u;
+const EMOJI_LIKE_REGEX = /^\p{Extended_Pictographic}$/u;
 
 /**
  * Normalizes the text in a header to be something that is actually linkable to. This mimics
  * how Obsidian does it's normalization, collapsing repeated spaces and stripping out control characters.
  */
 export function normalizeHeaderForLink(header: string): string {
-	return HEADER_CANONICALIZER.tryParse(header);
+	let normalized = "";
+	for (const char of header) {
+		if (HEADER_TOKEN_REGEX.test(char) || EMOJI_LIKE_REGEX.test(char)) {
+			normalized += char;
+		} else {
+			normalized += " ";
+		}
+	}
+	return normalized.split(/\s+/).join(" ").trim();
 }
 /** The Obsidian 'link', used for uniquely describing a file, header, or block. */
 export class Link {
@@ -163,7 +161,6 @@ export class Link {
 	}
 
 	/** Update this link with a new path. */
-	//@ts-ignore; error appeared after updating Obsidian to 0.15.4; it also updated other packages but didn't say which
 	public withPath(path: string) {
 		return new Link(Object.assign({}, this, { path }));
 	}

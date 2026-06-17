@@ -166,8 +166,7 @@ export default class TasksTimelineObsidianPlugin extends Plugin {
 		} catch (error) {
 			console.error("Failed to start MCP server:", error);
 			new Notice(
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				"MCP server failed to start. Check console for details.",
+				"Agent server failed to start. Check console for details.",
 			);
 		}
 	}

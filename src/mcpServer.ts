@@ -555,115 +555,122 @@ export class ObsidianMcpServer {
 		}
 
 		// Start session cleanup interval
-		this.cleanupInterval = getActiveWindow(this.plugin.app).setInterval(() => {
-			this.cleanupExpiredSessions();
-		}, CLEANUP_INTERVAL_MS);
+		this.cleanupInterval = getActiveWindow(this.plugin.app).setInterval(
+			() => {
+				this.cleanupExpiredSessions();
+			},
+			CLEANUP_INTERVAL_MS,
+		);
 
 		this.httpServer = http.createServer(
-			// eslint-disable-next-line @typescript-eslint/no-misused-promises
-			async (req: http.IncomingMessage, res: http.ServerResponse) => {
-				if (req.url !== "/mcp") {
-					res.writeHead(404);
-					res.end("Not found");
-					return;
-				}
-
-				if (!this.isAllowedOrigin(req.headers.origin)) {
-					res.writeHead(403, {
-						"Content-Type": "application/json",
-					});
-					res.end(JSON.stringify({ error: "Origin not allowed" }));
-					this.logger.warning(
-						`Rejected MCP request from origin: ${String(req.headers.origin)}`,
-						"http",
-					);
-					return;
-				}
-
-				// --- Auth middleware ---
-				const authEnabled =
-					this.plugin.settings.mcpServer.authEnabled ?? true;
-				if (authEnabled && this.authManager) {
-					const authHeader = req.headers["authorization"];
-					if (!authHeader) {
-						res.writeHead(401, {
-							"Content-Type": "application/json",
-						});
-						res.end(
-							JSON.stringify({
-								error: "Authorization header required",
-							}),
-						);
-						this.logger.warning(
-							"Auth failed: missing Authorization header",
-							"auth",
-						);
+			(req: http.IncomingMessage, res: http.ServerResponse) => {
+				void (async () => {
+					if (req.url !== "/mcp") {
+						res.writeHead(404);
+						res.end("Not found");
 						return;
 					}
 
-					const token = authHeader.replace(/^Bearer\s+/i, "");
-					const valid = await this.authManager.validateToken(token);
-					if (!valid) {
+					if (!this.isAllowedOrigin(req.headers.origin)) {
 						res.writeHead(403, {
 							"Content-Type": "application/json",
 						});
-						res.end(JSON.stringify({ error: "Invalid token" }));
+						res.end(
+							JSON.stringify({ error: "Origin not allowed" }),
+						);
 						this.logger.warning(
-							"Auth failed: invalid token",
-							"auth",
+							`Rejected MCP request from origin: ${String(req.headers.origin)}`,
+							"http",
 						);
 						return;
 					}
-				}
 
-				try {
-					// Session management
-					const sessionIdHeader = req.headers["mcp-session-id"] as
-						| string
-						| undefined;
-
-					if (req.method === "DELETE" && sessionIdHeader) {
-						// Close session
-						this.closeSession(sessionIdHeader);
-						res.writeHead(200);
-						res.end();
-						return;
-					}
-
-					if (sessionIdHeader) {
-						// Existing session
-						const session = this.sessions.get(sessionIdHeader);
-						if (!session) {
-							res.writeHead(404, {
+					// --- Auth middleware ---
+					const authEnabled =
+						this.plugin.settings.mcpServer.authEnabled ?? true;
+					if (authEnabled && this.authManager) {
+						const authHeader = req.headers["authorization"];
+						if (!authHeader) {
+							res.writeHead(401, {
 								"Content-Type": "application/json",
 							});
 							res.end(
 								JSON.stringify({
-									error: "Session not found",
+									error: "Authorization header required",
 								}),
+							);
+							this.logger.warning(
+								"Auth failed: missing Authorization header",
+								"auth",
 							);
 							return;
 						}
 
-						session.lastAccessAt = Date.now();
-						await session.transport.handleRequest(req, res);
-					} else {
-						// New session (initialize)
-						const session = this.createSession();
-						await session.server.connect(session.transport);
-						await session.transport.handleRequest(req, res);
+						const token = authHeader.replace(/^Bearer\s+/i, "");
+						const valid =
+							await this.authManager.validateToken(token);
+						if (!valid) {
+							res.writeHead(403, {
+								"Content-Type": "application/json",
+							});
+							res.end(JSON.stringify({ error: "Invalid token" }));
+							this.logger.warning(
+								"Auth failed: invalid token",
+								"auth",
+							);
+							return;
+						}
 					}
-				} catch (error) {
-					console.error("MCP request handling error:", error);
-					this.logger.error(
-						`Request handling error: ${error instanceof Error ? error.message : String(error)}`,
-						"http",
-					);
-					if (!res.headersSent) {
-						res.writeHead(500);
-						res.end("Internal server error");
+
+					try {
+						// Session management
+						const sessionIdHeader = req.headers[
+							"mcp-session-id"
+						] as string | undefined;
+
+						if (req.method === "DELETE" && sessionIdHeader) {
+							// Close session
+							this.closeSession(sessionIdHeader);
+							res.writeHead(200);
+							res.end();
+							return;
+						}
+
+						if (sessionIdHeader) {
+							// Existing session
+							const session = this.sessions.get(sessionIdHeader);
+							if (!session) {
+								res.writeHead(404, {
+									"Content-Type": "application/json",
+								});
+								res.end(
+									JSON.stringify({
+										error: "Session not found",
+									}),
+								);
+								return;
+							}
+
+							session.lastAccessAt = Date.now();
+							await session.transport.handleRequest(req, res);
+						} else {
+							// New session (initialize)
+							const session = this.createSession();
+							await session.server.connect(session.transport);
+							await session.transport.handleRequest(req, res);
+						}
+					} catch (error) {
+						console.error("MCP request handling error:", error);
+						this.logger.error(
+							`Request handling error: ${error instanceof Error ? error.message : String(error)}`,
+							"http",
+						);
+						if (!res.headersSent) {
+							res.writeHead(500);
+							res.end("Internal server error");
+						}
 					}
-				}
+				})();
 			},
 		);
 
@@ -688,7 +695,9 @@ export class ObsidianMcpServer {
 
 		// Stop cleanup interval
 		if (this.cleanupInterval) {
-			getActiveWindow(this.plugin.app).clearInterval(this.cleanupInterval);
+			getActiveWindow(this.plugin.app).clearInterval(
+				this.cleanupInterval,
+			);
 			this.cleanupInterval = null;
 		}
 

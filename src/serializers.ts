@@ -74,10 +74,16 @@ export const taskToMarkdown = (task: Task, originalLine: string): string => {
 			try {
 				const ft: unknown = task.extra["frontmatterTags"];
 				if (Array.isArray(ft)) {
-					frontmatterTags = ft as string[];
+					frontmatterTags = ft.filter(
+						(tag): tag is string => typeof tag === "string",
+					);
 				} else if (typeof ft === "string") {
-					// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-					frontmatterTags = JSON.parse(ft);
+					const parsed: unknown = JSON.parse(ft);
+					if (Array.isArray(parsed)) {
+						frontmatterTags = parsed.filter(
+							(tag): tag is string => typeof tag === "string",
+						);
+					}
 				}
 			} catch (e) {
 				console.warn("Failed to parse frontmatterTags", e);
