@@ -1,4 +1,5 @@
 import { App } from "obsidian";
+import { MarkdownText } from "@tasks-timeline/components";
 import React from "react";
 import { getActiveWindow } from "./obsidianDom";
 
@@ -24,6 +25,28 @@ const internalLinkStyle: React.CSSProperties = {
 	color: "var(--link-color, #7f6df2)",
 	textDecoration: "none",
 };
+
+function renderInlineMarkdown(
+	content: string,
+	key?: React.Key
+): React.ReactNode {
+	if (!content) {
+		return null;
+	}
+
+	return (
+		<MarkdownText
+			key={key}
+			content={content}
+			inline
+			compact
+			className="tasks-timeline-title-markdown"
+			paragraphClassName="inline whitespace-pre-wrap"
+			codeClassName="rounded bg-slate-100/80 px-1 py-0 font-mono text-[0.9em] text-slate-700"
+			linkClassName="font-medium text-blue-600 underline decoration-blue-300 underline-offset-2"
+		/>
+	);
+}
 
 /**
  * Combined regex matching link types in priority order (left-to-right):
@@ -101,16 +124,14 @@ export function createRenderTitle(
 		const segments = parseTitleSegments(title);
 
 		if (segments.length === 1 && segments[0].type === "text") {
-			return title;
+			return renderInlineMarkdown(title);
 		}
 
 		return segments.map(
 			(seg: TitleSegment, i: number): React.ReactNode => {
 				switch (seg.type) {
 					case "text":
-						return (
-							<span key={i}>{seg.content}</span>
-						);
+						return renderInlineMarkdown(seg.content, i);
 					case "markdown-link":
 						return (
 							<a
@@ -122,7 +143,7 @@ export function createRenderTitle(
 								}
 								aria-label={`Open ${seg.text} in browser`}
 							>
-								{seg.text}
+								{renderInlineMarkdown(seg.text)}
 							</a>
 						);
 					case "wikilink":
@@ -136,7 +157,9 @@ export function createRenderTitle(
 								}
 								aria-label={`Open ${seg.display ?? seg.page} in new tab`}
 							>
-								{seg.display ?? seg.page}
+								{renderInlineMarkdown(
+									seg.display ?? seg.page
+								)}
 							</a>
 						);
 					case "bare-url":
