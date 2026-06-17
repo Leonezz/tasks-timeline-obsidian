@@ -1,10 +1,10 @@
 {
 	"id": "tasks-timeline",
 	"name": "Tasks Timeline",
-	"version": "0.2.12",
+	"version": "0.2.13",
 	"minAppVersion": "1.11.4",
 	"description": "View and manage vault tasks on a timeline.",
-	"author": "zhuwenq <zhuwenqa@outlook.com>",
+	"author": "zhuwenq",
 	"authorUrl": "https://github.com/Leonezz",
 	"fundingUrl": {
 		"Buy Me a Coffee": "https://buymeacoffee.com/zhuwenqa",
