@@ -113,6 +113,7 @@ Dates are embedded in task lines using emoji prefixes:
 In this vault, \`task.category\` is the **vault-relative file path** where the task lives (e.g., \`Projects/WebApp.md\`). This means:
 - Filtering by category = filtering by file/folder
 - Moving a task to a different category = moving it to a different file
+- The surrounding note, folder, project, daily note, tags, and links are often part of the user's intent
 
 **Default category (file)**: \`${defaultCategory}\`
 
@@ -148,9 +149,13 @@ Files whose name matches a date pattern are treated as daily notes. Tasks from d
 
 ## Tips for AI Agents
 
+- Treat user messages as task-management intent. The user may provide context from notes, meetings, projects, tags, or daily notes to identify the todo items they want manipulated.
+- Use vault context when matching tasks. A task's note file path can be as important as its title, especially when several tasks have similar wording.
 - Always use \`query_tasks\` with filters rather than fetching all tasks and filtering client-side
 - When creating tasks, set \`category\` to the target file path; omit it to use the default (\`${defaultCategory}\`)
 - Task IDs are internal identifiers — use \`query_tasks\` to discover them
+- For updates, completions, cancellations, or deletes, resolve task IDs from query results and preserve unrelated task fields
+- If the relevant note, project, task identity, or destructive scope is ambiguous, ask a concise clarification before changing the vault
 - The \`extra\` field contains vault-specific metadata like \`isDailyNote\`, \`scheduledAt\`, \`marker\`, etc.`;
 
 			return [{ role: "user", content }];

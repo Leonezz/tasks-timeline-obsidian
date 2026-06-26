@@ -1,4 +1,4 @@
-import { UserConfig, defineConfig } from "vite";
+import { UserConfig, defineConfig, type Plugin } from "vite";
 import path from "path";
 import { builtinModules } from "node:module";
 import { fileURLToPath } from "url";
@@ -13,12 +13,53 @@ const builtins = [
 	),
 ];
 
+function replaceOnce(code: string, from: string, to: string): string {
+	const firstIndex = code.indexOf(from);
+	if (firstIndex === -1) {
+		throw new Error(
+			`@tasks-timeline/components patch target not found: ${from}`,
+		);
+	}
+	if (code.indexOf(from, firstIndex + from.length) !== -1) {
+		throw new Error(
+			`@tasks-timeline/components patch target is ambiguous: ${from}`,
+		);
+	}
+	return code.replace(from, to);
+}
+
+function patchTasksTimelineComponentsForObsidian(): Plugin {
+	return {
+		name: "patch-tasks-timeline-components-for-obsidian",
+		enforce: "pre",
+		transform(code, id) {
+			const normalizedId = id.replace(/\\/g, "/");
+			if (
+				!normalizedId.includes(
+					"@tasks-timeline/components/dist/index.js",
+				)
+			) {
+				return null;
+			}
+
+			const patched = replaceOnce(
+				code,
+				"onAICommand: BI,",
+				`onAICommand: async ($) => {
+            await Wt($, { sessionId: null });
+          },`,
+			);
+			return { code: patched, map: null };
+		},
+	};
+}
+
 export default defineConfig(async ({ mode }) => {
 	const { resolve } = path;
 	const prod = mode === "production";
 
 	return {
-		plugins: [],
+		plugins: [patchTasksTimelineComponentsForObsidian()],
 		resolve: {
 			alias: {
 				"@": path.resolve(__dirname, "./src"),

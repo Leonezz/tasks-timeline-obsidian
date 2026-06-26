@@ -280,6 +280,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 		}
 
 		let deleteSucceeded = false;
+		let expectedContent: string | null = null;
 		await this.plugin.app.vault.process(file, (content) => {
 			const lines = content.split("\n");
 			let lineIndex = -1;
@@ -314,17 +315,26 @@ export class ObsidianTasksRepo implements TaskRepository {
 
 			// 3. Delete the line
 			lines.splice(lineIndex, 1);
-
-			// Remove from cache to prevent subsequent operations on stale ID
-			this.taskCache.delete(id);
 			deleteSucceeded = true;
 
-			return lines.join("\n");
+			expectedContent = lines.join("\n");
+			return expectedContent;
 		});
 
 		if (!deleteSucceeded) {
 			throw new Error("Could not find task line to delete");
 		}
+
+		const persistedContent = await this.plugin.app.vault.read(file);
+		if (persistedContent !== expectedContent) {
+			throw new Error(
+				`Cannot delete task: file write was rejected or changed by Obsidian: ${cached.file}`,
+			);
+		}
+
+		// Remove from cache only after Obsidian has persisted the delete.
+		this.taskCache.delete(id);
+		this.invalidateFile(cached.file);
 	}
 
 	/**

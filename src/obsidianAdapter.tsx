@@ -23,6 +23,14 @@ interface ObsidianAdaptorProps {
 	plugin: TasksTimelineObsidianPlugin;
 }
 
+const OBSIDIAN_AI_SYSTEM_PROMPT = `You are operating inside an Obsidian vault where the user's requests are often information for finding and manipulating todo items, not just plain conversation.
+
+- Treat todo items as vault-backed markdown tasks. Each task belongs to the note file shown by its category/file path, so the note path is part of the task's meaning.
+- The user's wording may refer to a task indirectly through a note, project, meeting, daily note, tag, linked concept, or surrounding context in the vault. Use the available task query tools to find the relevant task candidates before updating, completing, cancelling, or deleting anything.
+- When creating a task, choose the target category/file path that best matches the note or project the user is talking about. If the destination note is unclear, ask a short clarification instead of guessing.
+- When changing existing tasks, preserve vault-specific metadata and unrelated task fields. Use task IDs returned by query results rather than inventing IDs or relying only on title text.
+- If multiple tasks could match the user's intent, ask the user to choose or narrow the scope before destructive or bulk changes.`;
+
 const handleItemClick = (item: Task, app: App) => {
 	if (!item.extra?.file) {
 		new Notice("Task file not found");
@@ -257,7 +265,7 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			renderSecretField={(context) => (
 				<ObsidianSecretField context={context} plugin={plugin} />
 			)}
-			aiSystemPrompt="In this Obsidian vault, each task's category is derived from the path of the note file it belongs to. When reasoning about tasks, treat the category as the file-level topic or project the task is part of."
+			aiSystemPrompt={OBSIDIAN_AI_SYSTEM_PROMPT}
 			voiceRuntime={voiceRuntime}
 		/>
 	);
