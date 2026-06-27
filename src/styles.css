@@ -3,16 +3,6 @@
 	min-height: 0;
 }
 
-.tasks-timeline-app
-	[class~="absolute"][class~="-top-1"][class~="h-6.5"][class~="w-px"][class~="left-1/2"] {
-	height: calc(50% - 0.75rem);
-}
-
-.tasks-timeline-app
-	[class~="absolute"][class~="top-5"][class~="-bottom-1"][class~="w-px"][class~="left-1/2"] {
-	top: calc(50% + 0.75rem);
-}
-
 .tasks-timeline-settings-host {
 	display: block;
 	width: 100%;

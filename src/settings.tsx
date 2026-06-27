@@ -93,7 +93,7 @@ export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
 				},
 			},
 		},
-		defaultFocusMode: true,
+		defaultFocusMode: false,
 		totalTokenUsage: 0,
 		tokenUsageByModel: {},
 		defaultCategory: "",

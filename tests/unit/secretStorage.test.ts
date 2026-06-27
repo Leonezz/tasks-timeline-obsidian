@@ -39,7 +39,7 @@ const defaultAppSetting: AppSettings = {
 			gemini: { apiKey: "", model: "" },
 		},
 	},
-	defaultFocusMode: true,
+	defaultFocusMode: false,
 	totalTokenUsage: 0,
 	tokenUsageByModel: {},
 	defaultCategory: "",
