@@ -1,3 +1,4 @@
+import type { Task } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "../../src/main";
 import { ObsidianTasksRepo } from "../../src/tasksRepo";
 import { App, TFile, type ListItemCache } from "../mocks/obsidian";
@@ -96,5 +97,44 @@ describe("ObsidianTasksRepo.deleteTask", () => {
 		await expect(app.vault.cachedRead(file)).resolves.toBe(
 			"- [ ] Keep\n- [ ] Keep too\n",
 		);
+	});
+});
+
+describe("ObsidianTasksRepo.addTask", () => {
+	const baseTask: Task = {
+		id: "new-task",
+		title: "New task",
+		status: "todo",
+		priority: "medium",
+		tags: [],
+	};
+
+	it("appends a task to an existing markdown target note", async () => {
+		const { app, file, repo } = createRepo("- [ ] Existing\n");
+
+		await repo.addTask({
+			...baseTask,
+			title: "Created by agent",
+			category: "Tasks.md",
+		});
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Existing\n- [ ] Created by agent\n",
+		);
+	});
+
+	it("rejects when the target note does not exist", async () => {
+		const { app, repo } = createRepo("- [ ] Existing\n");
+
+		await expect(
+			repo.addTask({
+				...baseTask,
+				title: "Missing target",
+				category: "Missing.md",
+			}),
+		).rejects.toThrow(
+			"Cannot add task: target note not found: Missing.md",
+		);
+		expect(app.vault.getAbstractFileByPath("Missing.md")).toBeNull();
 	});
 });

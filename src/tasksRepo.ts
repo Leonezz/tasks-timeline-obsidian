@@ -136,15 +136,18 @@ export class ObsidianTasksRepo implements TaskRepository {
 			"Tasks.md";
 
 		const vault = this.plugin.app.vault;
-		let file = vault.getAbstractFileByPath(targetFile);
-
-		if (!file) {
-			file = await vault.create(targetFile, "");
-		}
+		const file = vault.getAbstractFileByPath(targetFile);
 
 		if (!(file instanceof TFile)) {
 			throw new Error(
-				`Cannot add task: path is not a file: ${targetFile}`,
+				file
+					? `Cannot add task: path is not a file: ${targetFile}`
+					: `Cannot add task: target note not found: ${targetFile}`,
+			);
+		}
+		if (file.extension !== "md") {
+			throw new Error(
+				`Cannot add task: target note is not a markdown file: ${targetFile}`,
 			);
 		}
 
