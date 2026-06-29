@@ -1,6 +1,6 @@
 {
 	"name": "tasks-timeline-obsidian",
-	"version": "0.2.21",
+	"version": "0.2.22",
 	"description": "View and manage vault tasks on a timeline.",
 	"main": "dist/main.js",
 	"type": "module",
@@ -52,7 +52,7 @@
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.27.1",
-		"@tasks-timeline/components": "github:Leonezz/tasks-timeline-components#v0.4.31",
+		"@tasks-timeline/components": "github:Leonezz/tasks-timeline-components#v0.4.33",
 		"luxon": "^3.7.2",
 		"parsimmon": "^1.18.1",
 		"react": "18.3.1",

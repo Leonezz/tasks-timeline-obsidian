@@ -1,4 +1,4 @@
-import { Priority, TaskStatus } from "@tasks-timeline/components";
+import type { Priority, TaskStatus } from "@tasks-timeline/components";
 
 export const TasksPrioritySymbolToLabel: Record<string, Priority> = {
 	"🔺": "high",
@@ -18,24 +18,25 @@ export const scheduledDateSymbol = "⏳";
 export const dueDateSymbol = "📅";
 export const doneDateSymbol = "✅";
 
-export const MdMarkerToTaskStatus: Record<string, TaskStatus> = {
+export type MarkdownTaskStatus = Extract<
+	TaskStatus,
+	"todo" | "doing" | "done" | "cancelled"
+>;
+
+export const MdMarkerToTaskStatus: Record<string, MarkdownTaskStatus> = {
 	" ": "todo",
 	x: "done",
 	"/": "doing",
 	"-": "cancelled",
 };
-export const TaskStatusCollection: TaskStatus[] = [
+export const TaskStatusCollection: MarkdownTaskStatus[] = [
 	"todo",
 	"cancelled",
 	"doing",
 	"done",
-	"unplanned",
-	"due",
-	"scheduled",
-	"overdue",
 ];
 
-export const getTaskStatusFromMarker = (marker: string): TaskStatus => {
+export const getTaskStatusFromMarker = (marker: string): MarkdownTaskStatus => {
 	switch (marker.trim()) {
 		case "": {
 			return "todo";
