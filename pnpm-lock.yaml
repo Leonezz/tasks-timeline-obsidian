@@ -24,8 +24,8 @@ importers:
         specifier: ^1.27.1
         version: 1.27.1(zod@4.3.6)
       '@tasks-timeline/components':
-        specifier: github:Leonezz/tasks-timeline-components#v0.4.34
-        version: https://codeload.github.com/Leonezz/tasks-timeline-components/tar.gz/e1bcbb4f5aca2c0dad41f17fb62b21ed92b12717(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.3.6)
+        specifier: github:Leonezz/tasks-timeline-components#v0.4.35
+        version: https://codeload.github.com/Leonezz/tasks-timeline-components/tar.gz/fb59c6f532a69972b64db6305ada5479808212d1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.3.6)
       luxon:
         specifier: ^3.7.2
         version: 3.7.2
@@ -1410,9 +1410,9 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@tasks-timeline/components@https://codeload.github.com/Leonezz/tasks-timeline-components/tar.gz/e1bcbb4f5aca2c0dad41f17fb62b21ed92b12717':
-    resolution: {tarball: https://codeload.github.com/Leonezz/tasks-timeline-components/tar.gz/e1bcbb4f5aca2c0dad41f17fb62b21ed92b12717}
-    version: 0.4.34
+  '@tasks-timeline/components@https://codeload.github.com/Leonezz/tasks-timeline-components/tar.gz/fb59c6f532a69972b64db6305ada5479808212d1':
+    resolution: {tarball: https://codeload.github.com/Leonezz/tasks-timeline-components/tar.gz/fb59c6f532a69972b64db6305ada5479808212d1}
+    version: 0.4.35
     peerDependencies:
       react: ^18.3.1 || ^19.0.0
       react-dom: ^18.3.1 || ^19.0.0
@@ -5611,7 +5611,7 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@tasks-timeline/components@https://codeload.github.com/Leonezz/tasks-timeline-components/tar.gz/e1bcbb4f5aca2c0dad41f17fb62b21ed92b12717(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.3.6)':
+  '@tasks-timeline/components@https://codeload.github.com/Leonezz/tasks-timeline-components/tar.gz/fb59c6f532a69972b64db6305ada5479808212d1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.3.6)':
     dependencies:
       '@ai-sdk/anthropic': 3.0.84(zod@4.3.6)
       '@ai-sdk/google': 3.0.82(zod@4.3.6)
