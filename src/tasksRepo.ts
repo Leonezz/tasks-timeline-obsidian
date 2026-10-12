@@ -8,20 +8,23 @@ import {
 	TagCache,
 	TFile,
 } from "obsidian";
-import { getTaskStatusFromMarker } from "./symbols";
-import { TaskRegularExpressions } from "./tasksRegex";
 import {
 	dailyNoteTaskParser,
 	markerBasedStatusParser,
 	parseDataViewFormatItem,
-	parseTasksFormatItem,
 	remainderParser,
 	tagsParser,
 } from "./parsers";
-import { taskToMarkdown } from "./serializers";
 import TasksTimelineObsidianPlugin from "./main";
 import { Link } from "./link";
-import { Task, TaskRepository } from "@tasks-timeline/components";
+import {
+	getTaskStatusFromMarker,
+	parseTasksFormatItem,
+	Task,
+	TaskRegularExpressions,
+	TaskRepository,
+	taskToMarkdown,
+} from "@tasks-timeline/components";
 
 export class ObsidianTasksRepo implements TaskRepository {
 	name: string = "Obsidian Notes";

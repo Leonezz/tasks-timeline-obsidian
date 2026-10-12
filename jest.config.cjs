@@ -19,6 +19,7 @@ module.exports = {
 		'obsidian': '<rootDir>/tests/mocks/obsidian.ts',
 		'\\.css$': '<rootDir>/tests/mocks/styleMock.ts',
 	},
+	setupFiles: ['<rootDir>/tests/polyfills.ts'],
 	setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
 	collectCoverageFrom: [
 		'src/**/*.{ts,tsx}',
