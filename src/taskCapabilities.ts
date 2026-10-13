@@ -74,12 +74,14 @@ export function createObsidianCapabilityContext(
 			return task;
 		},
 
-		async addTask(task: Task): Promise<void> {
+		async addTask(task: Task): Promise<Task> {
 			const targetPath = getTaskTargetPath(plugin, task);
 			assertAllowedPath(securityManager, targetPath, "add task");
 			assertAllowedTask(securityManager, task, "add task");
 
-			await tasksRepo.addTask(task);
+			// Return the stored task: its id comes from the file position, so
+			// create_task must report it instead of its own temporary id.
+			return tasksRepo.addTask(task);
 		},
 
 		async updateTask(task: Task): Promise<void> {

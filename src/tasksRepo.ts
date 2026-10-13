@@ -26,6 +26,9 @@ import {
 	taskToMarkdown,
 } from "@tasks-timeline/components";
 
+/** How long addTask waits for Obsidian to index the line it appended. */
+const ADDED_TASK_INDEX_TIMEOUT_MS = 5000;
+
 export class ObsidianTasksRepo implements TaskRepository {
 	name: string = "Obsidian Notes";
 	plugin: TasksTimelineObsidianPlugin;
@@ -132,7 +135,13 @@ export class ObsidianTasksRepo implements TaskRepository {
 		return flattenedTasks;
 	}
 
-	async addTask(task: Task): Promise<void> {
+	/**
+	 * Appends a task to its target note and returns the task as stored in the
+	 * vault. Stored ids are derived from file path + line + column (see
+	 * `fromLine`), so the id the caller generated is not the one later updates
+	 * must use. The returned task carries the real id.
+	 */
+	async addTask(task: Task): Promise<Task> {
 		const targetFile =
 			task.category ||
 			this.plugin.settings.appSetting.defaultCategory ||
@@ -162,16 +171,76 @@ export class ObsidianTasksRepo implements TaskRepository {
 			? "\t" + task.description.trim().replace(/\n/g, "\n\t")
 			: "";
 
+		let insertedLine = -1;
 		await vault.process(file, (content) => {
 			const block =
 				taskLine + (descriptionLine ? "\n" + descriptionLine : "");
-			if (content.length > 0 && !content.endsWith("\n")) {
-				return content + "\n" + block + "\n";
-			}
-			return content + block + "\n";
+			const prefix =
+				content.length > 0 && !content.endsWith("\n")
+					? content + "\n"
+					: content;
+			insertedLine = prefix.split("\n").length - 1;
+			return prefix + block + "\n";
 		});
 
 		this.invalidateFile(targetFile);
+		return this.readAddedTask(file, insertedLine);
+	}
+
+	/**
+	 * Re-reads a freshly appended task once Obsidian has indexed the new line.
+	 * The task line is appended past the previous end of the file, so a list
+	 * item at `line` can only come from the updated metadata.
+	 */
+	private async readAddedTask(file: TFile, line: number): Promise<Task> {
+		await this.waitForTaskItem(file, line);
+		this.invalidateFile(file.path);
+
+		const tasks = await this.loadTasks();
+		const stored = tasks.find(
+			(t) =>
+				t.extra?.file === file.path &&
+				t.extra?.position !== undefined &&
+				(JSON.parse(t.extra.position) as Pos).start.line === line,
+		);
+		if (!stored) {
+			throw new Error(
+				`Task was written to ${file.path} (line ${line + 1}) but could not be read back as a task. List tasks to find its id before changing it.`,
+			);
+		}
+		return stored;
+	}
+
+	private waitForTaskItem(file: TFile, line: number): Promise<void> {
+		const metadataCache = this.plugin.app.metadataCache;
+		const hasTaskItem = () =>
+			metadataCache
+				.getFileCache(file)
+				?.listItems?.some(
+					(item) =>
+						item.task !== undefined &&
+						item.position.start.line === line,
+				) ?? false;
+
+		if (hasTaskItem()) return Promise.resolve();
+
+		return new Promise<void>((resolve, reject) => {
+			let timer: number | undefined;
+			const ref = metadataCache.on("changed", (changedFile) => {
+				if (changedFile.path !== file.path || !hasTaskItem()) return;
+				window.clearTimeout(timer);
+				metadataCache.offref(ref);
+				resolve();
+			});
+			timer = window.setTimeout(() => {
+				metadataCache.offref(ref);
+				reject(
+					new Error(
+						`Task was written to ${file.path} (line ${line + 1}) but Obsidian did not index it within ${ADDED_TASK_INDEX_TIMEOUT_MS / 1000}s. List tasks to find its id before changing it.`,
+					),
+				);
+			}, ADDED_TASK_INDEX_TIMEOUT_MS);
+		});
 	}
 
 	saveTasks(tasks: Task[]): Promise<void> {

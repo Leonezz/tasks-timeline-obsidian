@@ -1,34 +1,8 @@
 import type { Task } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "../../src/main";
 import { ObsidianTasksRepo } from "../../src/tasksRepo";
-import { App, TFile, type ListItemCache } from "../mocks/obsidian";
-
-function createListItems(content: string): ListItemCache[] {
-	let offset = 0;
-	return content.split("\n").flatMap((line, lineNumber) => {
-		const startOffset = offset;
-		offset += line.length + 1;
-
-		if (!/^- \[[^\]]\] /.test(line)) {
-			return [];
-		}
-
-		return [
-			{
-				position: {
-					start: { line: lineNumber, col: 0, offset: startOffset },
-					end: {
-						line: lineNumber,
-						col: line.length,
-						offset: startOffset + line.length,
-					},
-				},
-				parent: -1,
-				task: line.slice(3, 4),
-			},
-		];
-	});
-}
+import { App, TFile } from "../mocks/obsidian";
+import { indexFile, reindexAfterWrites } from "../helpers/testHelpers";
 
 function createRepo(content: string) {
 	const app = new App();
@@ -37,12 +11,7 @@ function createRepo(content: string) {
 	if (!(file instanceof TFile)) {
 		throw new Error("Test file not created");
 	}
-	app.metadataCache._setCache("Tasks.md", {
-		listItems: createListItems(content),
-		sections: [],
-		links: [],
-		tags: [],
-	});
+	indexFile(app, "Tasks.md", content);
 
 	const plugin = {
 		app,
@@ -111,6 +80,7 @@ describe("ObsidianTasksRepo.addTask", () => {
 
 	it("appends a task to an existing markdown target note", async () => {
 		const { app, file, repo } = createRepo("- [ ] Existing\n");
+		reindexAfterWrites(app);
 
 		await repo.addTask({
 			...baseTask,
@@ -121,6 +91,59 @@ describe("ObsidianTasksRepo.addTask", () => {
 		await expect(app.vault.cachedRead(file)).resolves.toBe(
 			"- [ ] Existing\n- [ ] Created by agent\n",
 		);
+	});
+
+	it("returns the stored task with its file-position id", async () => {
+		const { app, repo } = createRepo("- [ ] Existing");
+		reindexAfterWrites(app);
+
+		const stored = await repo.addTask({
+			...baseTask,
+			id: "ai-temporary-id",
+			title: "Created by agent",
+			category: "Tasks.md",
+		});
+
+		expect(stored.id).toBe("Tasks.md:1:0");
+		expect(stored.title).toBe("Created by agent");
+		expect(app.metadataCache._listenerCount()).toBe(0);
+	});
+
+	it("lets the returned id be used for a follow-up update", async () => {
+		const { app, file, repo } = createRepo("- [ ] Existing\n");
+		reindexAfterWrites(app);
+
+		const stored = await repo.addTask({
+			...baseTask,
+			title: "Created by agent",
+			category: "Tasks.md",
+		});
+		await repo.updateTask({ ...stored, status: "done" });
+
+		await expect(app.vault.cachedRead(file)).resolves.toMatch(
+			/^- \[ \] Existing\n- \[x\] Created by agent/,
+		);
+	});
+
+	it("rejects with an explicit error when Obsidian never indexes the new line", async () => {
+		jest.useFakeTimers();
+		try {
+			const { app, repo } = createRepo("- [ ] Existing\n");
+
+			const result = repo.addTask({
+				...baseTask,
+				title: "Never indexed",
+				category: "Tasks.md",
+			});
+			const assertion = expect(result).rejects.toThrow(
+				/Task was written to Tasks.md \(line 2\) but Obsidian did not index it/,
+			);
+			await jest.advanceTimersByTimeAsync(5000);
+			await assertion;
+			expect(app.metadataCache._listenerCount()).toBe(0);
+		} finally {
+			jest.useRealTimers();
+		}
 	});
 
 	it("rejects when the target note does not exist", async () => {

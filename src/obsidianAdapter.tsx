@@ -205,15 +205,25 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 	}, [plugin]);
 
 	// Task CRUD handlers
-	const handleTaskAdded = async (task: Task) => {
+	const handleTaskAdded = async (task: Task): Promise<Task> => {
 		try {
-			await stableTasksRepo.current.addTask(task);
-			// Don't call loadTasks() here — vault.process() triggers a "modify"
-			// event that invalidates the file cache, followed by a metadataCache
-			// "resolved" event that reloads tasks with fresh metadata.
+			const stored = await stableTasksRepo.current.addTask(task);
+			// Make the stored task (with its file-position id) visible to the
+			// agent right away so a follow-up update in the same turn finds it.
+			// The metadataCache "resolved" reload still refreshes the full list.
+			setTasks((prev) =>
+				prev.some((t) => t.id === stored.id) ? prev : [...prev, stored],
+			);
+			return stored;
 		} catch (error) {
 			console.error("Failed to add task:", error);
-			new Notice("Failed to add task.");
+			new Notice(
+				error instanceof Error
+					? `Failed to add task: ${error.message}`
+					: "Failed to add task.",
+			);
+			// Rethrow so the AI create_task tool reports the failure.
+			throw error;
 		}
 	};
 

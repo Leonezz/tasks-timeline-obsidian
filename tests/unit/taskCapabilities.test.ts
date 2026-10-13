@@ -68,4 +68,28 @@ describe("createObsidianCapabilityContext (MCP)", () => {
 			"- [ ] Keep\n- [ ] Secret #private\n",
 		);
 	});
+
+	it("reports the stored id from create_task so update_task can use it", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(
+			"- [ ] Existing\n",
+		);
+
+		const created = await capabilities.executeTool("create_task", {
+			title: "Created by agent",
+		});
+		expect(created.result).toMatchObject({
+			success: true,
+			id: "Tasks.md:1:0",
+		});
+
+		const updated = await capabilities.executeTool("update_task", {
+			id: "Tasks.md:1:0",
+			title: "Renamed by agent",
+		});
+
+		expect(updated.result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toMatch(
+			/^- \[ \] Existing\n- \[ \] Renamed by agent/,
+		);
+	});
 });
