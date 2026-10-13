@@ -3,7 +3,7 @@
  * These utilities make it easy to set up test scenarios
  */
 
-import { TFile, Vault, MetadataCache, App, CachedMetadata } from '../mocks/obsidian';
+import { TFile, Vault, MetadataCache, App, CachedMetadata, type ListItemCache } from '../mocks/obsidian';
 
 /**
  * Creates a test vault with files and content
@@ -239,4 +239,64 @@ export function createTestScenario(name: 'basic' | 'complex' | 'edge-cases'): Te
 	}
 
 	return vault;
+}
+
+/**
+ * Builds Obsidian-like list item metadata for every top-level task line.
+ */
+export function createListItems(content: string): ListItemCache[] {
+	let offset = 0;
+	return content.split("\n").flatMap((line, lineNumber) => {
+		const startOffset = offset;
+		offset += line.length + 1;
+
+		if (!/^- \[[^\]]\] /.test(line)) {
+			return [];
+		}
+
+		return [
+			{
+				position: {
+					start: { line: lineNumber, col: 0, offset: startOffset },
+					end: {
+						line: lineNumber,
+						col: line.length,
+						offset: startOffset + line.length,
+					},
+				},
+				parent: -1,
+				task: line.slice(3, 4),
+			},
+		];
+	});
+}
+
+/**
+ * Sets a file's metadata from its content, like Obsidian's indexer does.
+ */
+export function indexFile(app: App, path: string, content: string) {
+	app.metadataCache._setCache(path, {
+		listItems: createListItems(content),
+		sections: [],
+		links: [],
+		tags: [],
+	});
+}
+
+/**
+ * Makes `vault.process` re-index the written file asynchronously and fire
+ * metadataCache "changed", mimicking Obsidian's indexing after a write.
+ */
+export function reindexAfterWrites(app: App) {
+	const originalProcess = app.vault.process.bind(app.vault);
+	return jest
+		.spyOn(app.vault, "process")
+		.mockImplementation(async (file, fn) => {
+			await originalProcess(file, fn);
+			const content = await app.vault.read(file);
+			setTimeout(() => {
+				indexFile(app, file.path, content);
+				app.metadataCache.trigger("changed", file);
+			}, 0);
+		});
 }

@@ -123,12 +123,38 @@ export class Vault {
 	}
 }
 
+export interface EventRef {
+	name: string;
+	callback: (...args: unknown[]) => void;
+}
+
 export class MetadataCache {
 	private cache = new Map<string, CachedMetadata>();
+	private listeners: EventRef[] = [];
 
 	// Mock method to set cache for testing
 	_setCache(path: string, metadata: CachedMetadata) {
 		this.cache.set(path, metadata);
+	}
+
+	on(name: string, callback: (...args: unknown[]) => void): EventRef {
+		const ref = { name, callback };
+		this.listeners = [...this.listeners, ref];
+		return ref;
+	}
+
+	offref(ref: EventRef): void {
+		this.listeners = this.listeners.filter((l) => l !== ref);
+	}
+
+	trigger(name: string, ...args: unknown[]): void {
+		this.listeners
+			.filter((l) => l.name === name)
+			.forEach((l) => l.callback(...args));
+	}
+
+	_listenerCount(): number {
+		return this.listeners.length;
 	}
 
 	getFileCache(file: TFile): CachedMetadata | null {

@@ -52,7 +52,7 @@
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.27.1",
-		"@tasks-timeline/components": "github:Leonezz/tasks-timeline-components#v0.5.0",
+		"@tasks-timeline/components": "github:Leonezz/tasks-timeline-components#v0.8.0",
 		"luxon": "^3.7.2",
 		"parsimmon": "^1.18.1",
 		"react": "18.3.1",

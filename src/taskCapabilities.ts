@@ -47,7 +47,7 @@ function assertAllowedTask(
 }
 
 /**
- * Creates the shared task capability context used by MCP and future AI hosts.
+ * Creates the headless task capability context used by the MCP server.
  *
  * The Obsidian repository stays responsible for persistence. This adapter owns
  * policy checks and host UI feedback so every AI surface uses the same task
@@ -118,5 +118,13 @@ export function createObsidianCapabilityContext(
 		notify(_type: "success" | "error" | "info", message: string) {
 			new Notice(message);
 		},
+
+		// This context is headless (used by the MCP server) and has no
+		// `confirm` UI. External MCP clients run their own tool-approval flow,
+		// and the security manager still filters paths and tags, so destructive
+		// tools (delete_task, batch_update_tasks) proceed instead of being
+		// refused. The in-app agent builds its own context
+		// with a `confirm` dialog inside the component library.
+		confirmPolicy: "skip",
 	};
 }
