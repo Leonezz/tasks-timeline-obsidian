@@ -130,7 +130,9 @@ export function locateTaskLine(
 
 /**
  * Finds all lines of a task (its line and description lines), for removing
- * them. Every one must still hold the text it had when read.
+ * them. Every one must still hold the text it had when read, and no line
+ * may have joined them since: removing the known lines would leave a new
+ * description line attached to the previous list item.
  *
  * @returns the first line and line count, or undefined when changed
  */
@@ -141,11 +143,24 @@ export function locateTaskBlock(
 ): { start: number; count: number } | undefined {
 	const expectedLines = blockLines(expected);
 	const start = locate(lines, expectedLines, position);
-	return start === -1 ? undefined : { start, count: expectedLines.length };
+	if (start === -1) {
+		return undefined;
+	}
+	const count = expectedLines.length;
+	return continuesItem(lines, start, start + count)
+		? undefined
+		: { start, count };
 }
 
 const indentWidth = (whitespace: string): number =>
 	[...whitespace].reduce((width, c) => width + (c === "\t" ? 4 : 1), 0);
+
+/** A list marker, including one with nothing after it. */
+const LIST_MARKER = /^([-*+]|\d+[.)])(?:[ \t]|$)/;
+/** Lines that end a list item's text instead of continuing it lazily. */
+const ATX_HEADING = /^#{1,6}(?:[ \t]|$)/;
+const THEMATIC_BREAK = /^([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+const CODE_FENCE = /^(?:`{3,}|~{3,})/;
 
 /** A line's quote depth, indentation width and text after both. */
 function lineShape(line: string): {
@@ -161,6 +176,52 @@ function lineShape(line: string): {
 		indent: indentWidth(indentation),
 		text: afterQuote.slice(indentation.length),
 	};
+}
+
+/** The column a list item's text starts at: past its marker and spaces. */
+function contentColumn(item: { indent: number; text: string }): number {
+	const marker = item.text.match(/^([-*+]|\d+[.)])[ \t]*/)?.[0] ?? "";
+	return item.indent + indentWidth(marker);
+}
+
+/**
+ * Whether the lines from `after` on continue the list item on `taskLine`,
+ * the way Obsidian's index extends an item:
+ * - the next line, when indented to the item's text or as lazy text, unless
+ *   it starts a heading, thematic break or code fence;
+ * - a line after blank lines, when indented to the item's text.
+ *
+ * Only lines in the item's quote depth count, and list items never do
+ * (see {@link hasNestedItems}). Obsidian sometimes counts lines beyond these,
+ * but claiming one it does not count would make the task undeletable.
+ */
+function continuesItem(
+	lines: readonly string[],
+	taskLine: number,
+	after: number,
+): boolean {
+	const task = lineShape(lines[taskLine] ?? "");
+	const following = lines.slice(after).map(lineShape);
+	const nextIndex = following.findIndex((shape) => shape.text.trim() !== "");
+	const next = following[nextIndex];
+	if (next === undefined) {
+		return false;
+	}
+	const text = next.text.trimEnd();
+	const sameQuote = following
+		.slice(0, nextIndex + 1)
+		.every((shape) => shape.quoteDepth === task.quoteDepth);
+	if (!sameQuote || LIST_MARKER.test(text)) {
+		return false;
+	}
+	if (next.indent >= contentColumn(task)) {
+		return true;
+	}
+	const isLazyText =
+		!ATX_HEADING.test(text) &&
+		!THEMATIC_BREAK.test(text) &&
+		!CODE_FENCE.test(text);
+	return nextIndex === 0 && isLazyText;
 }
 
 /**

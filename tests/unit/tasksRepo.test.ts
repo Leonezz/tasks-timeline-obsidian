@@ -501,6 +501,55 @@ describe("ObsidianTasksRepo multi-line tasks", () => {
 		);
 		await expect(app.vault.cachedRead(file)).resolves.toBe(edited);
 	});
+
+	it.each([
+		[
+			"an indented description line",
+			"- [ ] Keep\n- [ ] With notes\n\tDetails\n- [ ] After\n",
+			"- [ ] Keep\n- [ ] With notes\n\tDetails\n\tAdded later\n- [ ] After\n",
+		],
+		[
+			"a first description line",
+			"- [ ] Keep\n- [ ] Plain\n- [ ] After\n",
+			"- [ ] Keep\n- [ ] Plain\n\tAdded later\n- [ ] After\n",
+		],
+		[
+			"a lazy continuation line",
+			"- [ ] Keep\n- [ ] Plain\n",
+			"- [ ] Keep\n- [ ] Plain\nadded later\n",
+		],
+		[
+			"a callout description line",
+			"> [!todo] Inbox\n> - [ ] Keep\n> - [ ] Quoted\n",
+			"> [!todo] Inbox\n> - [ ] Keep\n> - [ ] Quoted\n> \tAdded later\n",
+		],
+	])(
+		"refuses to delete a task that gained %s since it was read",
+		async (_kind, content, edited) => {
+			const { app, file, repo } = createRepo(content);
+			const tasks = await repo.loadTasks();
+			await app.vault.modify(file, edited);
+			indexFile(app, "Tasks.md", edited);
+
+			await expect(repo.deleteTask(tasks[1]!.id)).rejects.toThrow(
+				"changed since it was read",
+			);
+			await expect(app.vault.cachedRead(file)).resolves.toBe(edited);
+		},
+	);
+
+	it("deletes a task followed by a heading", async () => {
+		const { app, file, repo } = createRepo(
+			"- [ ] Keep\n- [ ] Delete me\n# Next section\n",
+		);
+		await repo.loadTasks();
+
+		await repo.deleteTask("Tasks.md:1:0");
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Keep\n# Next section\n",
+		);
+	});
 });
 
 describe("keepRecurrenceDroppedByModal", () => {
