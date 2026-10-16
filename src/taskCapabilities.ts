@@ -46,18 +46,30 @@ function assertAllowedTask(
 	}
 }
 
+export interface ObsidianCapabilityContext extends CapabilityContext {
+	/** Stops watching the vault. Call when the MCP server stops. */
+	dispose(): void;
+}
+
 /**
  * Creates the headless task capability context used by the MCP server.
  *
  * The Obsidian repository stays responsible for persistence. This adapter owns
  * policy checks and host UI feedback so every AI surface uses the same task
  * semantics.
+ *
+ * Unlike the timeline view, nothing reloads this repository on vault events,
+ * so it watches the vault itself: listings then reflect edits made in
+ * Obsidian. Single-task reads re-read the note and refuse ids whose line
+ * changed since they were listed, because an id is a line position and may
+ * by then name a different task.
  */
 export function createObsidianCapabilityContext(
 	plugin: TasksTimelineObsidianPlugin,
 	securityManager?: SecurityManager,
-): CapabilityContext {
+): ObsidianCapabilityContext {
 	const tasksRepo = new ObsidianTasksRepo(plugin);
+	const stopWatching = tasksRepo.watchVault();
 
 	return {
 		async getTasks(): Promise<Task[]> {
@@ -66,8 +78,7 @@ export function createObsidianCapabilityContext(
 		},
 
 		async getTask(id: string): Promise<Task | null> {
-			const tasks = await tasksRepo.loadTasks();
-			const task = tasks.find((t) => t.id === id) ?? null;
+			const task = await tasksRepo.getTask(id);
 			if (task && securityManager && !securityManager.isTaskAllowed(task)) {
 				return null;
 			}
@@ -85,8 +96,7 @@ export function createObsidianCapabilityContext(
 		},
 
 		async updateTask(task: Task): Promise<void> {
-			const tasks = await tasksRepo.loadTasks();
-			const existingTask = tasks.find((t) => t.id === task.id);
+			const existingTask = await tasksRepo.getTask(task.id);
 			if (!existingTask) {
 				throw new Error(`Cannot update task: task not found: ${task.id}`);
 			}
@@ -100,8 +110,7 @@ export function createObsidianCapabilityContext(
 		},
 
 		async deleteTask(id: string): Promise<void> {
-			const tasks = await tasksRepo.loadTasks();
-			const existingTask = tasks.find((t) => t.id === id);
+			const existingTask = await tasksRepo.getTask(id);
 			if (!existingTask) {
 				throw new Error(`Cannot delete task: task not found: ${id}`);
 			}
@@ -128,5 +137,7 @@ export function createObsidianCapabilityContext(
 		// refused. The in-app agent builds its own context
 		// with a `confirm` dialog inside the component library.
 		confirmPolicy: "skip",
+
+		dispose: stopWatching,
 	};
 }

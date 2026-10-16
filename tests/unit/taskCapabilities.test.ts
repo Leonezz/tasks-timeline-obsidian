@@ -1,9 +1,16 @@
-import { createCapabilities } from "@tasks-timeline/components";
+import {
+	createCapabilities,
+	type Capabilities,
+} from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "../../src/main";
 import { SecurityManager } from "../../src/mcpSecurity";
 import { createObsidianCapabilityContext } from "../../src/taskCapabilities";
 import { App, TFile } from "../mocks/obsidian";
-import { indexFile, reindexAfterWrites } from "../helpers/testHelpers";
+import {
+	editExternally,
+	indexFile,
+	reindexAfterWrites,
+} from "../helpers/testHelpers";
 
 function createMcpCapabilities(content: string, blacklist = "") {
 	const app = new App();
@@ -91,5 +98,151 @@ describe("createObsidianCapabilityContext (MCP)", () => {
 		await expect(app.vault.cachedRead(file)).resolves.toMatch(
 			/^- \[ \] Existing\n- \[ \] Renamed by agent/,
 		);
+	});
+});
+
+describe("createObsidianCapabilityContext keeps task data current (MCP)", () => {
+	const DUE = "- [ ] Water plants 🔁 every day 📅 2026-10-16";
+	const DONE = "- [x] Water plants 🔁 every day 📅 2026-10-16 ✅ 2026-10-16";
+	const NEXT = "- [ ] Water plants 🔁 every day 📅 2026-10-17";
+
+	interface TaskSummary {
+		id: string;
+		title: string;
+		status: string;
+		dueAt?: string;
+	}
+
+	async function queryTasks(capabilities: Capabilities) {
+		const { result } = await capabilities.executeTool("query_tasks", {});
+		return (result as { tasks: TaskSummary[] }).tasks;
+	}
+
+	it("lists fresh tasks after the vault changes outside the plugin", async () => {
+		const { app, capabilities } = createMcpCapabilities(`${DUE}\n`);
+		await queryTasks(capabilities);
+
+		await editExternally(app, "Tasks.md", `${DONE}\n${NEXT}\n`);
+
+		expect(await queryTasks(capabilities)).toEqual([
+			expect.objectContaining({ id: "Tasks.md:0:0", status: "done" }),
+			expect.objectContaining({
+				id: "Tasks.md:1:0",
+				status: "todo",
+				dueAt: "2026-10-17",
+			}),
+		]);
+	});
+
+	it("refuses to complete a task the user already completed (next occurrence below)", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(`${DUE}\n`);
+		await queryTasks(capabilities);
+		await editExternally(app, "Tasks.md", `${DONE}\n${NEXT}\n`);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: "Tasks.md:0:0",
+		});
+
+		expect(result).toMatchObject({
+			error: expect.stringMatching(/changed since it was read/),
+		});
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			`${DONE}\n${NEXT}\n`,
+		);
+	});
+
+	it("never overwrites the next occurrence the Tasks plugin wrote above (default)", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(`${DUE}\n`);
+		await queryTasks(capabilities);
+		await editExternally(app, "Tasks.md", `${NEXT}\n${DONE}\n`);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: "Tasks.md:0:0",
+		});
+
+		expect(result).toMatchObject({
+			error: expect.stringMatching(/changed since it was read/),
+		});
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			`${NEXT}\n${DONE}\n`,
+		);
+	});
+
+	it("acts on the fresh task once it is queried again", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(`${DUE}\n`);
+		await queryTasks(capabilities);
+		await editExternally(app, "Tasks.md", `${NEXT}\n${DONE}\n`);
+		await queryTasks(capabilities);
+
+		const { result } = await capabilities.executeTool("update_task", {
+			id: "Tasks.md:0:0",
+			priority: "high",
+		});
+
+		expect(result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			`- [ ] Water plants ⏫ 📅 2026-10-17 🔁 every day\n${DONE}\n`,
+		);
+	});
+
+	it("reads back its own update_task", async () => {
+		const { capabilities } = createMcpCapabilities(`${DUE}\n`);
+		await queryTasks(capabilities);
+
+		await capabilities.executeTool("update_task", {
+			id: "Tasks.md:0:0",
+			title: "Water the plants",
+		});
+
+		expect(await queryTasks(capabilities)).toEqual([
+			expect.objectContaining({
+				id: "Tasks.md:0:0",
+				title: "Water the plants",
+			}),
+		]);
+	});
+
+	it("applies consecutive updates to the same task without a new query", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(`${DUE}\n`);
+		await queryTasks(capabilities);
+
+		await capabilities.executeTool("update_task", {
+			id: "Tasks.md:0:0",
+			title: "Water the plants",
+		});
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: "Tasks.md:0:0",
+		});
+
+		expect(result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toMatch(
+			/^- \[x\] Water the plants /,
+		);
+	});
+
+	it("batch-updates tasks in one note once Obsidian re-indexes each write", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(
+			"- [ ] First\n- [ ] Second\n",
+		);
+
+		const { result } = await capabilities.executeTool(
+			"batch_update_tasks",
+			{ filter: { status: "todo" }, update: { priority: "high" } },
+		);
+
+		expect(result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] First ⏫\n- [ ] Second ⏫\n",
+		);
+	});
+
+	it("stops watching the vault when disposed", () => {
+		const { app, ctx } = createMcpCapabilities(`${DUE}\n`);
+		expect(app.vault._listenerCount()).toBeGreaterThan(0);
+
+		ctx.dispose();
+
+		expect(app.vault._listenerCount()).toBe(0);
+		expect(app.metadataCache._listenerCount()).toBe(0);
 	});
 });

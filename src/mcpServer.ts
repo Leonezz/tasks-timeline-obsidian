@@ -26,7 +26,10 @@ import { SecurityManager } from "./mcpSecurity";
 import { McpLogger } from "./mcpLogger";
 import { ResourceSubscriptionManager } from "./mcpSubscriptions";
 import { createObsidianPrompts } from "./mcpPrompts";
-import { createObsidianCapabilityContext } from "./taskCapabilities";
+import {
+	createObsidianCapabilityContext,
+	type ObsidianCapabilityContext,
+} from "./taskCapabilities";
 import { getActiveWindow } from "./obsidianDom";
 
 // --- Session types ---
@@ -99,6 +102,7 @@ function isLocalMcpHost(host: string): boolean {
 export class ObsidianMcpServer {
 	private plugin: TasksTimelineObsidianPlugin;
 	private httpServer: http.Server | null = null;
+	private ctx: ObsidianCapabilityContext;
 	private capabilities: Capabilities;
 	private obsidianPrompts: PromptSpec[] = [];
 	private sessions = new Map<string, McpSession>();
@@ -123,6 +127,7 @@ export class ObsidianMcpServer {
 			plugin,
 			this.securityManager,
 		);
+		this.ctx = ctx;
 		this.capabilities = createCapabilities(ctx);
 		this.obsidianPrompts = createObsidianPrompts(ctx);
 
@@ -690,8 +695,9 @@ export class ObsidianMcpServer {
 	}
 
 	async stop(): Promise<void> {
-		// Stop subscription manager
+		// Stop subscription manager and the task context's vault watcher
 		this.subscriptionManager.stop();
+		this.ctx.dispose();
 
 		// Stop cleanup interval
 		if (this.cleanupInterval) {

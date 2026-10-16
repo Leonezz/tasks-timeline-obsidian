@@ -260,3 +260,118 @@ describe("taskUpdateNeedsWrite", () => {
 		).toThrow(/category cannot be stored in the vault line/);
 	});
 });
+
+describe("ObsidianTasksRepo stale ids", () => {
+	async function overwrite(
+		app: App,
+		file: TFile,
+		content: string,
+	): Promise<void> {
+		await app.vault.modify(file, content);
+		indexFile(app, file.path, content);
+	}
+
+	it("refuses to update a task whose line now holds another task", async () => {
+		const { app, file, repo } = createRepo("- [ ] Old task\n");
+		const [task] = await repo.loadTasks();
+		await overwrite(app, file, "- [ ] Someone else's task\n");
+
+		await expect(
+			repo.updateTask({ ...task!, status: "done" }),
+		).rejects.toThrow("Task Tasks.md:0:0 changed since it was read");
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Someone else's task\n",
+		);
+	});
+
+	it("refuses to delete a task whose line now holds another task", async () => {
+		const { app, file, repo } = createRepo("- [ ] Old task\n");
+		await repo.loadTasks();
+		await overwrite(app, file, "- [ ] Someone else's task\n");
+
+		await expect(repo.deleteTask("Tasks.md:0:0")).rejects.toThrow(
+			"changed since it was read",
+		);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Someone else's task\n",
+		);
+	});
+
+	it("applies a second update of the same task before a reload (leaving edit mode)", async () => {
+		const { app, file, repo } = createRepo("- [ ] Draft\n");
+		const [task] = await repo.loadTasks();
+
+		// Both calls carry the task as first loaded, like the timeline does.
+		await repo.updateTask({ ...task!, title: "Draft title" });
+		await repo.updateTask({ ...task!, title: "Final title" });
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Final title\n",
+		);
+	});
+
+	it("updates an unchanged task that moved down a line", async () => {
+		const { app, file, repo } = createRepo("- [ ] Pay rent\n");
+		const [task] = await repo.loadTasks();
+		await overwrite(app, file, "# Inbox\n- [ ] Pay rent\n");
+
+		await repo.updateTask({ ...task!, status: "done" });
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"# Inbox\n- [x] Pay rent\n",
+		);
+	});
+
+	it("refuses when the moved line is ambiguous", async () => {
+		const { app, file, repo } = createRepo("- [ ] Pay rent\n");
+		const [task] = await repo.loadTasks();
+		const content = "# Inbox\n- [ ] Pay rent\n- [ ] Pay rent\n";
+		await overwrite(app, file, content);
+
+		await expect(
+			repo.updateTask({ ...task!, status: "done" }),
+		).rejects.toThrow("changed since it was read");
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+
+	it("reads its own update back", async () => {
+		const { app, repo } = createRepo("- [ ] Draft\n");
+		reindexAfterWrites(app);
+		const [task] = await repo.loadTasks();
+
+		await repo.updateTask({ ...task!, title: "Renamed" });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const [reloaded] = await repo.loadTasks();
+		expect(reloaded?.title).toBe("Renamed");
+	});
+
+	it("keeps ids resolvable while a reload is in progress", async () => {
+		const { app, file, repo } = createRepo(
+			"- [ ] Keep\n- [ ] Delete me\n",
+		);
+		await repo.loadTasks();
+		repo.invalidateFile("Tasks.md");
+		const originalCachedRead = app.vault.cachedRead.bind(app.vault);
+		let releaseRead: () => void = () => undefined;
+		const readGate = new Promise<void>((resolve) => {
+			releaseRead = resolve;
+		});
+		const readSpy = jest
+			.spyOn(app.vault, "cachedRead")
+			.mockImplementationOnce(async (target) => {
+				await readGate;
+				return originalCachedRead(target);
+			});
+
+		const reload = repo.loadTasks();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(readSpy).toHaveBeenCalledTimes(1);
+
+		await repo.deleteTask("Tasks.md:1:0");
+		releaseRead();
+		await reload;
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe("- [ ] Keep\n");
+	});
+});

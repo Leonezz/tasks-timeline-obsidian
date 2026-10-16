@@ -91,6 +91,16 @@ export class Vault {
 		this.listeners = this.listeners.filter((l) => l !== ref);
 	}
 
+	trigger(name: string, ...args: unknown[]): void {
+		this.listeners
+			.filter((l) => l.name === name)
+			.forEach((l) => l.callback(...args));
+	}
+
+	_listenerCount(): number {
+		return this.listeners.length;
+	}
+
 	// Mock method to add files for testing
 	_addFile(path: string, content: string) {
 		const file = new TFile(path);
@@ -122,10 +132,13 @@ export class Vault {
 		const content = await this.read(file);
 		const newContent = fn(content);
 		this.fileContents.set(file.path, newContent);
+		// Like Obsidian: an actual write fires "modify".
+		if (newContent !== content) this.trigger('modify', file);
 	}
 
 	async modify(file: TFile, content: string): Promise<void> {
 		this.fileContents.set(file.path, content);
+		this.trigger('modify', file);
 	}
 
 	async delete(file: TFile): Promise<void> {

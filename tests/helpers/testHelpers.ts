@@ -284,6 +284,19 @@ export function indexFile(app: App, path: string, content: string) {
 }
 
 /**
+ * Rewrites a file the way an edit outside the plugin does (the editor, or the
+ * Tasks plugin completing a recurring task): the write fires vault "modify",
+ * then Obsidian re-indexes the file and fires metadataCache "changed".
+ */
+export async function editExternally(app: App, path: string, content: string) {
+	const file = app.vault.getAbstractFileByPath(path);
+	if (!(file instanceof TFile)) throw new Error(`File not found: ${path}`);
+	await app.vault.modify(file, content);
+	indexFile(app, path, content);
+	app.metadataCache.trigger("changed", file);
+}
+
+/**
  * Makes `vault.process` re-index the written file asynchronously and fire
  * metadataCache "changed", mimicking Obsidian's indexing after a write.
  */
