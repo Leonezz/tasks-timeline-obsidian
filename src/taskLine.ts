@@ -57,16 +57,27 @@ export function isSameTaskLine(a: string, b: string): boolean {
 	return lineContent(lineA) === lineContent(lineB);
 }
 
-function lineOfPosition(position: string | undefined): number | undefined {
+function parsePosition(position: string | undefined): Pos | undefined {
 	if (!position) {
 		return undefined;
 	}
 	try {
-		return (JSON.parse(position) as Pos).start.line;
+		return JSON.parse(position) as Pos;
 	} catch (e) {
 		console.warn("Failed to parse task position", e);
 		return undefined;
 	}
+}
+
+/**
+ * A rewritten task line in the form task text is stored and read back:
+ * from where Obsidian's list item starts, after any `> ` or indentation.
+ */
+export function storedLineText(
+	line: string,
+	position: string | undefined,
+): string {
+	return line.slice(parsePosition(position)?.start.col ?? 0);
 }
 
 function matchesAt(
@@ -93,7 +104,7 @@ function locate(
 	expectedLines: readonly string[],
 	position: string | undefined,
 ): number {
-	const line = lineOfPosition(position);
+	const line = parsePosition(position)?.start.line;
 	if (line !== undefined && matchesAt(lines, line, expectedLines)) {
 		return line;
 	}

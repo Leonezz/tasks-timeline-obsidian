@@ -329,6 +329,87 @@ describe("ObsidianAdaptor task handlers", () => {
 		);
 	});
 
+	describe("editing a task again after the timeline's own write", () => {
+		// Obsidian re-indexes the written note and the timeline reloads.
+		async function reloadTimeline(
+			app: obsidian.App,
+			file: obsidian.TFile,
+			shown: Task,
+		): Promise<Task> {
+			indexFile(app, file.path, await app.vault.cachedRead(file));
+			app.metadataCache.trigger("resolved");
+			await waitFor(() => expect(mockAppProps?.tasks[0]).not.toBe(shown), {
+				timeout: 2000,
+			});
+			return mockAppProps!.tasks[0]!;
+		}
+
+		async function editInTimeline(previous: Task, changes: Partial<Task>) {
+			await mockAppProps!.onTaskUpdated({ ...previous, ...changes }, previous);
+			await waitFor(() => expect(mockAppProps?.tasks[0]).not.toBe(previous));
+			return mockAppProps!.tasks[0]!;
+		}
+
+		const cases: [string, Partial<Task>, Partial<Task>, string][] = [
+			[
+				"a rename, then a due date",
+				{ title: "Draft title" },
+				{ dueAt: "2026-10-20" },
+				"- [ ] Draft title 📅 2026-10-20\n",
+			],
+			[
+				"a priority, then a rename",
+				{ priority: "high" },
+				{ title: "Renamed" },
+				"- [ ] Renamed ⏫\n",
+			],
+		];
+
+		it.each(cases)(
+			"saves an editor copy taken before the reload, after it (%s)",
+			async (_case, first, second, expected) => {
+				const { app, file, previous } = await renderAdaptor("- [ ] Draft\n");
+				const editorCopy = await editInTimeline(previous, first);
+				const current = await reloadTimeline(app, file, editorCopy);
+
+				await mockAppProps!.onTaskUpdated(
+					{ ...editorCopy, ...second },
+					current,
+				);
+
+				await expect(app.vault.cachedRead(file)).resolves.toBe(expected);
+				expect(noticeSpy).not.toHaveBeenCalled();
+			},
+		);
+
+		it.each(cases)(
+			"saves an editor copy before the reload (%s)",
+			async (_case, first, second, expected) => {
+				const { app, file, previous } = await renderAdaptor("- [ ] Draft\n");
+				const editorCopy = await editInTimeline(previous, first);
+
+				await mockAppProps!.onTaskUpdated(
+					{ ...editorCopy, ...second },
+					editorCopy,
+				);
+
+				await expect(app.vault.cachedRead(file)).resolves.toBe(expected);
+				expect(noticeSpy).not.toHaveBeenCalled();
+			},
+		);
+
+		it("keeps its copy in the form a reload reads it (callout)", async () => {
+			const { app, file, previous } = await renderAdaptor(
+				"> - [ ] Quoted\n> \tDetails\n",
+			);
+			const shown = await editInTimeline(previous, { title: "Renamed" });
+
+			const reloaded = await reloadTimeline(app, file, shown);
+
+			expect(shown.extra?.rawText).toBe(reloaded.extra?.rawText);
+		});
+	});
+
 	it("refuses to delete a task with sub-tasks", async () => {
 		const content = "- [ ] Parent\n\t- [ ] Child\n";
 		const { app, file, previous } = await renderAdaptor(content);

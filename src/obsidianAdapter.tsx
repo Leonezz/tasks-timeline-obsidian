@@ -265,10 +265,17 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			if (!taskUpdateNeedsWrite(incoming, previous)) {
 				return;
 			}
-			await stableTasksRepo.current.updateTask(incoming);
-			// Update local state only after successful save
+			const storedText =
+				await stableTasksRepo.current.writeTaskLine(incoming);
+			// Update local state only after successful save, with the line as
+			// now written: an editor opened from this copy before the reload
+			// must still match the reloaded task.
+			const stored = {
+				...incoming,
+				extra: { ...incoming.extra, rawText: storedText },
+			};
 			setTasks((prev) =>
-				prev.map((t) => (t.id === incoming.id ? incoming : t)),
+				prev.map((t) => (t.id === stored.id ? stored : t)),
 			);
 		} catch (error) {
 			console.error("Failed to update task:", error);

@@ -26,6 +26,7 @@ import {
 	locateTaskLine,
 	snapshotOf,
 	StaleTaskError,
+	storedLineText,
 	TaskSnapshot,
 } from "./taskLine";
 import {
@@ -441,12 +442,20 @@ export class ObsidianTasksRepo implements TaskRepository {
 		return Promise.resolve();
 	}
 
+	/** See {@link writeTaskLine}. */
+	async updateTask(task: Task): Promise<void> {
+		await this.writeTaskLine(task);
+	}
+
 	/**
 	 * Rewrites a task's line. The line must still hold the text this
 	 * repository last handed out for the id (or have moved unchanged);
 	 * otherwise the id may now name another task and this throws.
+	 *
+	 * @returns the task's text as now stored (its line plus description
+	 * lines, as a reload reads them), for callers that keep a copy
 	 */
-	async updateTask(task: Task): Promise<void> {
+	async writeTaskLine(task: Task): Promise<string> {
 		// Prefer the snapshot: the UI component might not preserve extra fields
 		const snapshot = this.taskCache.get(task.id);
 		const filePath = task.extra?.file || snapshot?.file;
@@ -502,14 +511,18 @@ export class ObsidianTasksRepo implements TaskRepository {
 		// Remember the written line so a follow-up update of the same task
 		// (e.g. leaving inline edit mode) still matches before the next load.
 		// Its description lines below were left as they were.
-		const descriptionLines = expectedLine.split("\n").slice(1);
+		const storedText = [
+			storedLineText(outcome.writtenLine, position),
+			...expectedLine.split("\n").slice(1),
+		].join("\n");
 		this.taskCache.set(task.id, {
 			file: filePath,
-			rawText: [outcome.writtenLine, ...descriptionLines].join("\n"),
+			rawText: storedText,
 			loadedText: snapshot?.loadedText ?? expectedLine,
 			position: position ?? "",
 		});
 		this.invalidateFile(filePath);
+		return storedText;
 	}
 
 	async deleteTask(id: string): Promise<void> {
