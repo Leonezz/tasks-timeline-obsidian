@@ -129,15 +129,18 @@ export function migrateFiltersToFilterRule(
 	const filters = appSetting.filters;
 	if (!filters) return appSetting;
 
-	const toRule = <T>(value: unknown): FilterRule<T> | undefined => {
+	// Settings saved before FilterRule still hold a flat T[] for each field.
+	const toRule = <T>(
+		value: FilterRule<T> | T[],
+	): FilterRule<T> | undefined => {
 		if (Array.isArray(value)) {
-			return { include: value as T[], exclude: [] };
+			return { include: value, exclude: [] };
 		}
 		return undefined;
 	};
 
-	const tags = toRule<string>(filters.tags);
-	const categories = toRule<string>(filters.categories);
+	const tags = toRule(filters.tags);
+	const categories = toRule(filters.categories);
 	const priorities = toRule(filters.priorities);
 	const statuses = toRule(filters.statuses);
 

@@ -123,7 +123,7 @@ export function createRenderTitle(
 	return (title: string): React.ReactNode => {
 		const segments = parseTitleSegments(title);
 
-		if (segments.length === 1 && segments[0].type === "text") {
+		if (segments.length === 1 && segments[0]?.type === "text") {
 			return renderInlineMarkdown(title);
 		}
 

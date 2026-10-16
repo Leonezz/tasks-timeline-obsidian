@@ -106,7 +106,8 @@ function writeSettingValue<T>(
 	secret: string,
 ): T {
 	const writeAtPath = (cursor: unknown, index: number): unknown => {
-		if (index === selector.path.length) {
+		const segment = selector.path[index];
+		if (segment === undefined) {
 			return secret;
 		}
 
@@ -114,7 +115,6 @@ function writeSettingValue<T>(
 			return cursor;
 		}
 
-		const segment = selector.path[index];
 		return {
 			...cursor,
 			[segment]: writeAtPath(cursor[segment], index + 1),

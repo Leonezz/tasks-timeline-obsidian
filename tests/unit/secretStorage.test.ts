@@ -314,10 +314,10 @@ describe("normalizeSecretSelectors", () => {
 
 describe("secretSelectorKey", () => {
 	it("uses settings paths as stable selector keys", () => {
-		const [selector] = emitSecretSelectors(defaultAppSetting);
-
-		expect(secretSelectorKey(selector)).toBe(
-			"aiConfig.providers.gemini.apiKey"
+		const [firstKey] = emitSecretSelectors(defaultAppSetting).map(
+			(selector) => secretSelectorKey(selector)
 		);
+
+		expect(firstKey).toBe("aiConfig.providers.gemini.apiKey");
 	});
 });
