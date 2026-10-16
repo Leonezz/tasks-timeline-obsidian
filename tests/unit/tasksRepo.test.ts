@@ -375,3 +375,129 @@ describe("ObsidianTasksRepo stale ids", () => {
 		await expect(app.vault.cachedRead(file)).resolves.toBe("- [ ] Keep\n");
 	});
 });
+
+describe.each([
+	{
+		kind: "callout",
+		content: "> [!todo] Inbox\n> - [ ] Quoted task\n",
+		before: "> [!todo] Inbox\n",
+		quote: "> ",
+	},
+	{
+		kind: "nested blockquote",
+		content: "> > - [ ] Quoted task\n",
+		before: "",
+		quote: "> > ",
+	},
+])("ObsidianTasksRepo with a $kind task", ({ content, before, quote }) => {
+	it("toggles it", async () => {
+		const { app, file, repo } = createRepo(content);
+		const [task] = await repo.loadTasks();
+
+		await repo.updateTask({ ...task!, status: "done" });
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			`${before}${quote}- [x] Quoted task\n`,
+		);
+	});
+
+	it("edits it", async () => {
+		const { app, file, repo } = createRepo(content);
+		const [task] = await repo.loadTasks();
+
+		await repo.updateTask({ ...task!, title: "Renamed" });
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			`${before}${quote}- [ ] Renamed\n`,
+		);
+	});
+
+	it("deletes it", async () => {
+		const { app, file, repo } = createRepo(content);
+		const [task] = await repo.loadTasks();
+
+		await repo.deleteTask(task!.id);
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(before);
+	});
+});
+
+describe("ObsidianTasksRepo multi-line tasks", () => {
+	it("deletes a task together with its description lines", async () => {
+		const { app, file, repo } = createRepo(
+			"- [ ] Keep\n- [ ] With notes\n\tFirst detail\n\tSecond detail\n- [ ] After\n",
+		);
+		await repo.loadTasks();
+
+		await repo.deleteTask("Tasks.md:1:0");
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Keep\n- [ ] After\n",
+		);
+	});
+
+	it("deletes a quoted task together with its description lines", async () => {
+		const { app, file, repo } = createRepo(
+			"> - [ ] Quoted\n> \tDetails\n> - [ ] Next\n",
+		);
+		await repo.loadTasks();
+
+		await repo.deleteTask("Tasks.md:0:2");
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"> - [ ] Next\n",
+		);
+	});
+
+	it("deletes a task that addTask created with a description", async () => {
+		const { app, file, repo } = createRepo("- [ ] Existing\n");
+		reindexAfterWrites(app);
+		const stored = await repo.addTask({
+			id: "new-task",
+			title: "Call the bank",
+			description: "Ask about fees",
+			status: "todo",
+			priority: "medium",
+			tags: [],
+			category: "Tasks.md",
+		});
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Existing\n- [ ] Call the bank\n\tAsk about fees\n",
+		);
+
+		await repo.deleteTask(stored.id);
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Existing\n",
+		);
+	});
+
+	it("deletes a described task updated since the last load", async () => {
+		const { app, file, repo } = createRepo(
+			"- [ ] With notes\n\tDetails\n- [ ] After\n",
+		);
+		const [task] = await repo.loadTasks();
+
+		await repo.updateTask({ ...task!, status: "done" });
+		await repo.deleteTask(task!.id);
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] After\n",
+		);
+	});
+
+	it("refuses to delete a multi-line task whose description changed", async () => {
+		const { app, file, repo } = createRepo(
+			"- [ ] With notes\n\tOld detail\n",
+		);
+		await repo.loadTasks();
+		const edited = "- [ ] With notes\n\tNew detail\n";
+		await app.vault.modify(file, edited);
+		indexFile(app, "Tasks.md", edited);
+
+		await expect(repo.deleteTask("Tasks.md:0:0")).rejects.toThrow(
+			"changed since it was read",
+		);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(edited);
+	});
+});

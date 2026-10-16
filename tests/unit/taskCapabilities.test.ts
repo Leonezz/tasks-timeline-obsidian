@@ -246,3 +246,67 @@ describe("createObsidianCapabilityContext keeps task data current (MCP)", () => 
 		expect(app.metadataCache._listenerCount()).toBe(0);
 	});
 });
+
+describe("createObsidianCapabilityContext with a callout task (MCP)", () => {
+	const CALLOUT = "> [!todo] Inbox\n> - [ ] Quoted task\n";
+
+	it("completes it", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(CALLOUT);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: "Tasks.md:1:2",
+		});
+
+		expect(result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toMatch(
+			/^> \[!todo\] Inbox\n> - \[x\] Quoted task ✅ \d{4}-\d{2}-\d{2}\n$/,
+		);
+	});
+
+	it("edits it", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(CALLOUT);
+
+		const { result } = await capabilities.executeTool("update_task", {
+			id: "Tasks.md:1:2",
+			title: "Renamed",
+		});
+
+		expect(result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"> [!todo] Inbox\n> - [ ] Renamed\n",
+		);
+	});
+
+	it("deletes it", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(CALLOUT);
+
+		const { result } = await capabilities.executeTool("delete_task", {
+			id: "Tasks.md:1:2",
+		});
+
+		expect(result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"> [!todo] Inbox\n",
+		);
+	});
+});
+
+describe("createObsidianCapabilityContext with a described task (MCP)", () => {
+	it("deletes the task and its description", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(
+			"- [ ] Existing\n",
+		);
+		const created = await capabilities.executeTool("create_task", {
+			title: "Call the bank",
+			description: "Ask about fees",
+		});
+		const { id } = created.result as { id: string };
+
+		const { result } = await capabilities.executeTool("delete_task", { id });
+
+		expect(result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Existing\n",
+		);
+	});
+});

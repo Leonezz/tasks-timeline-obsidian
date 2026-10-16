@@ -241,31 +241,61 @@ export function createTestScenario(name: 'basic' | 'complex' | 'edge-cases'): Te
 	return vault;
 }
 
+/** A task line, optionally inside blockquotes/callouts (`> `, `> > `). */
+const TASK_LINE = /^((?:> ?)*)- \[([^\]])\] /;
+const LIST_ITEM = /^\s*([-*+]|\d+[.)])\s/;
+
+/** An indented, non-list line inside the same quote continues the item. */
+function continuesItem(line: string | undefined, quote: string): boolean {
+	if (line === undefined || !line.startsWith(quote)) return false;
+	const rest = line.slice(quote.length);
+	return /^\s+\S/.test(rest) && !LIST_ITEM.test(rest);
+}
+
 /**
- * Builds Obsidian-like list item metadata for every top-level task line.
+ * Builds list item metadata for every top-level task line, positioned like
+ * Obsidian's parser: inside a quote the item starts after the `> ` prefix
+ * (start.col 2, or 4 for `> > `), and indented description lines below it
+ * extend the item's end.
  */
 export function createListItems(content: string): ListItemCache[] {
-	let offset = 0;
-	return content.split("\n").flatMap((line, lineNumber) => {
-		const startOffset = offset;
-		offset += line.length + 1;
+	const lines = content.split("\n");
+	const lineStarts = lines.reduce<number[]>(
+		(starts, line, index) => [
+			...starts,
+			index === 0 ? 0 : starts[index - 1]! + lines[index - 1]!.length + 1,
+		],
+		[],
+	);
 
-		if (!/^- \[[^\]]\] /.test(line)) {
+	return lines.flatMap((line, lineNumber) => {
+		const match = TASK_LINE.exec(line);
+		if (!match) {
 			return [];
 		}
+		const quote = match[1]!;
+		let endLine = lineNumber;
+		while (continuesItem(lines[endLine + 1], quote)) {
+			endLine++;
+		}
+		const endText = lines[endLine]!;
 
 		return [
 			{
 				position: {
-					start: { line: lineNumber, col: 0, offset: startOffset },
-					end: {
+					start: {
 						line: lineNumber,
-						col: line.length,
-						offset: startOffset + line.length,
+						col: quote.length,
+						offset: lineStarts[lineNumber]! + quote.length,
+					},
+					end: {
+						line: endLine,
+						col: endText.length,
+						offset: lineStarts[endLine]! + endText.length,
 					},
 				},
 				parent: -1,
-				task: line.slice(3, 4),
+				task: match[2]!,
 			},
 		];
 	});

@@ -20,14 +20,33 @@ export function snapshotOf(task: Task): TaskSnapshot | undefined {
 	return { file, rawText, position: task.extra?.position || "" };
 }
 
-/** A list item's text can span continuation lines; the task is the first. */
-function firstLine(text: string): string {
-	return text.split("\n")[0] ?? "";
+const LIST_ITEM = /^([-*+]|\d+[.)])\s/;
+
+/**
+ * A line's text without its quote or callout prefix, indentation and
+ * trailing spaces. A task's stored text starts after any `> ` prefix (that
+ * is where Obsidian's list item starts), while file lines include it.
+ */
+function lineContent(line: string): string {
+	return line.replace(/^[\s>]*/, "").trimEnd();
 }
 
-/** Whether two task lines are the same, ignoring surrounding whitespace. */
+/**
+ * The lines a task occupies: its own line, then the description lines that
+ * Obsidian counts as part of the list item. Stops at a nested list item,
+ * which is a task of its own.
+ */
+function blockLines(rawText: string): string[] {
+	const [first = "", ...rest] = rawText.split("\n");
+	const nested = rest.findIndex((line) => LIST_ITEM.test(lineContent(line)));
+	return [first, ...(nested === -1 ? rest : rest.slice(0, nested))];
+}
+
+/** Whether two tasks have the same task line (descriptions aside). */
 export function isSameTaskLine(a: string, b: string): boolean {
-	return firstLine(a).trim() === firstLine(b).trim();
+	const [lineA = ""] = a.split("\n");
+	const [lineB = ""] = b.split("\n");
+	return lineContent(lineA) === lineContent(lineB);
 }
 
 function lineOfPosition(position: string | undefined): number | undefined {
@@ -42,11 +61,43 @@ function lineOfPosition(position: string | undefined): number | undefined {
 	}
 }
 
+function matchesAt(
+	lines: readonly string[],
+	start: number,
+	expectedLines: readonly string[],
+): boolean {
+	return expectedLines.every((expected, offset) => {
+		const line = lines[start + offset];
+		return line !== undefined && lineContent(line) === lineContent(expected);
+	});
+}
+
 /**
- * Finds a task's line: at its stored position while that line still holds
- * the same text, otherwise the single line elsewhere with that text (lines
- * were added or removed above it). Never falls back to "whatever task sits
- * at the position now", which may be a different task.
+ * Finds where `expectedLines` sit: at the stored position while those lines
+ * still hold the same text, otherwise the single place elsewhere that does
+ * (lines were added or removed above). Never falls back to "whatever task
+ * sits at the position now", which may be a different task.
+ *
+ * @returns the first line's index, or -1 when changed or ambiguous
+ */
+function locate(
+	lines: readonly string[],
+	expectedLines: readonly string[],
+	position: string | undefined,
+): number {
+	const line = lineOfPosition(position);
+	if (line !== undefined && matchesAt(lines, line, expectedLines)) {
+		return line;
+	}
+	const matches = lines
+		.map((_, index) => index)
+		.filter((index) => matchesAt(lines, index, expectedLines));
+	return matches.length === 1 ? (matches[0] ?? -1) : -1;
+}
+
+/**
+ * Finds a task's own line, for rewriting it. Its description lines may have
+ * changed; only the task line is rewritten.
  *
  * @returns the line index, or -1 when the line changed or is ambiguous
  */
@@ -55,20 +106,23 @@ export function locateTaskLine(
 	expected: string,
 	position: string | undefined,
 ): number {
-	const line = lineOfPosition(position);
-	const lineAtPosition = line === undefined ? undefined : lines[line];
-	if (
-		line !== undefined &&
-		lineAtPosition !== undefined &&
-		isSameTaskLine(lineAtPosition, expected)
-	) {
-		return line;
-	}
+	return locate(lines, blockLines(expected).slice(0, 1), position);
+}
 
-	const matches = lines
-		.map((_, index) => index)
-		.filter((index) => isSameTaskLine(lines[index] ?? "", expected));
-	return matches.length === 1 ? (matches[0] ?? -1) : -1;
+/**
+ * Finds all lines of a task (its line and description lines), for removing
+ * them. Every one must still hold the text it had when read.
+ *
+ * @returns the first line and line count, or undefined when changed
+ */
+export function locateTaskBlock(
+	lines: readonly string[],
+	expected: string,
+	position: string | undefined,
+): { start: number; count: number } | undefined {
+	const expectedLines = blockLines(expected);
+	const start = locate(lines, expectedLines, position);
+	return start === -1 ? undefined : { start, count: expectedLines.length };
 }
 
 export function staleTaskError(id: string): Error {

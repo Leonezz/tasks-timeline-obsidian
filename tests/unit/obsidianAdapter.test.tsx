@@ -124,6 +124,46 @@ describe("ObsidianAdaptor task handlers", () => {
 		expect(processSpy).not.toHaveBeenCalled();
 	});
 
+	describe("with a task inside a callout", () => {
+		const CALLOUT = "> [!todo] Inbox\n> - [ ] Quoted task\n";
+
+		it("toggles it", async () => {
+			const { app, file, previous } = await renderAdaptor(CALLOUT);
+
+			await mockAppProps!.onTaskUpdated(
+				{ ...previous, status: "done" },
+				previous,
+			);
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"> [!todo] Inbox\n> - [x] Quoted task\n",
+			);
+		});
+
+		it("edits it", async () => {
+			const { app, file, previous } = await renderAdaptor(CALLOUT);
+
+			await mockAppProps!.onTaskUpdated(
+				{ ...previous, title: "Renamed" },
+				previous,
+			);
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"> [!todo] Inbox\n> - [ ] Renamed\n",
+			);
+		});
+
+		it("deletes it", async () => {
+			const { app, file, previous } = await renderAdaptor(CALLOUT);
+
+			await mockAppProps!.onTaskDeleted(previous.id, previous);
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"> [!todo] Inbox\n",
+			);
+		});
+	});
+
 	it("rejects and shows the reason when a delete fails", async () => {
 		const { previous } = await renderAdaptor("- [ ] Pay rent\n");
 

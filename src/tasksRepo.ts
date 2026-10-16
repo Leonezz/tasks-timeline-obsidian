@@ -21,6 +21,7 @@ import { Link } from "./link";
 import {
 	filePathOfTaskId,
 	isSameTaskLine,
+	locateTaskBlock,
 	locateTaskLine,
 	snapshotOf,
 	staleTaskError,
@@ -462,9 +463,11 @@ export class ObsidianTasksRepo implements TaskRepository {
 		}
 		// Remember the written line so a follow-up update of the same task
 		// (e.g. leaving inline edit mode) still matches before the next load.
+		// Its description lines below were left as they were.
+		const descriptionLines = expectedLine.split("\n").slice(1);
 		this.taskCache.set(task.id, {
 			file: filePath,
-			rawText: outcome.writtenLine,
+			rawText: [outcome.writtenLine, ...descriptionLines].join("\n"),
 			position: position ?? "",
 		});
 		this.invalidateFile(filePath);
@@ -486,17 +489,19 @@ export class ObsidianTasksRepo implements TaskRepository {
 		const outcome: { expectedContent?: string } = {};
 		await this.plugin.app.vault.process(file, (content) => {
 			const lines = content.split("\n");
-			const lineIndex = locateTaskLine(
+			// Remove the description lines too, or they would join the
+			// previous task's list item.
+			const block = locateTaskBlock(
 				lines,
 				cached.rawText,
 				cached.position,
 			);
-			if (lineIndex === -1) {
+			if (!block) {
 				return content;
 			}
 			outcome.expectedContent = [
-				...lines.slice(0, lineIndex),
-				...lines.slice(lineIndex + 1),
+				...lines.slice(0, block.start),
+				...lines.slice(block.start + block.count),
 			].join("\n");
 			return outcome.expectedContent;
 		});
