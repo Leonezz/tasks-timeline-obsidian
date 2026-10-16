@@ -164,6 +164,125 @@ describe("ObsidianAdaptor task handlers", () => {
 		});
 	});
 
+	describe("with a recurring task (components <= v0.8.0 edit modal)", () => {
+		const RECURRING = "- [ ] Water plants 📅 2026-10-16 🔁 every day\n";
+
+		// What v0.8.0's modal saves when its recurrence switch is untouched.
+		const savedByModal = (task: Task, changes: Partial<Task> = {}) => ({
+			...task,
+			...changes,
+			recurringInterval: undefined,
+		});
+
+		it("keeps 🔁 on a modal save that changes nothing", async () => {
+			const { app, file, previous } = await renderAdaptor(RECURRING);
+			const processSpy = jest.spyOn(app.vault, "process");
+
+			await mockAppProps!.onTaskUpdated(savedByModal(previous), previous);
+
+			expect(processSpy).not.toHaveBeenCalled();
+			await expect(app.vault.cachedRead(file)).resolves.toBe(RECURRING);
+		});
+
+		it("keeps 🔁 on a modal save that only changes tags", async () => {
+			const { app, file, previous } = await renderAdaptor(RECURRING);
+
+			await mockAppProps!.onTaskUpdated(
+				savedByModal(previous, {
+					tags: [{ id: "#home", name: "#home" }],
+				}),
+				previous,
+			);
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"- [ ] Water plants #home 📅 2026-10-16 🔁 every day\n",
+			);
+		});
+
+		it("keeps 🔁 on a modal save that only changes the description", async () => {
+			const { app, file, previous } = await renderAdaptor(RECURRING);
+
+			await expect(
+				mockAppProps!.onTaskUpdated(
+					savedByModal(previous, { description: "Use rain water" }),
+					previous,
+				),
+			).rejects.toThrow(/description cannot be stored/);
+			await expect(app.vault.cachedRead(file)).resolves.toBe(RECURRING);
+		});
+
+		it("clears 🔁 when the modal's recurrence switch is turned off", async () => {
+			const { app, file, previous } = await renderAdaptor(RECURRING);
+
+			await mockAppProps!.onTaskUpdated(
+				savedByModal(previous, { isRecurring: false }),
+				previous,
+			);
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"- [ ] Water plants 📅 2026-10-16\n",
+			);
+		});
+
+		it("clears 🔁 when the in-app AI clears the recurrence", async () => {
+			const { app, file, previous } = await renderAdaptor(RECURRING);
+
+			// v0.8.0 update_task with recurrence "".
+			await mockAppProps!.onTaskUpdated(
+				{ ...previous, isRecurring: undefined, recurringInterval: undefined },
+				previous,
+			);
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"- [ ] Water plants 📅 2026-10-16\n",
+			);
+		});
+	});
+
+	describe("when the note changed since the timeline loaded", () => {
+		const changeNote = async (
+			app: obsidian.App,
+			file: obsidian.TFile,
+			content: string,
+		) => {
+			await app.vault.modify(file, content);
+			indexFile(app, file.path, content);
+		};
+
+		it("asks the user to retry and refreshes the timeline", async () => {
+			const { app, file, previous } = await renderAdaptor("- [ ] Pay rent\n");
+			await changeNote(app, file, "- [ ] Pay the rent today\n");
+
+			await expect(
+				mockAppProps!.onTaskUpdated(
+					{ ...previous, status: "done" },
+					previous,
+				),
+			).rejects.toThrow("changed since it was read — query tasks again");
+			expect(noticeSpy).toHaveBeenCalledWith(
+				"Failed to update task: this note changed in the editor; the timeline is refreshing — try again.",
+			);
+			await waitFor(() =>
+				expect(mockAppProps?.tasks[0]?.title).toBe("Pay the rent today"),
+			);
+		});
+
+		it("does the same for a delete", async () => {
+			const { app, file, previous } = await renderAdaptor("- [ ] Pay rent\n");
+			await changeNote(app, file, "- [ ] Pay the rent today\n");
+
+			await expect(
+				mockAppProps!.onTaskDeleted(previous.id, previous),
+			).rejects.toThrow("changed since it was read");
+			expect(noticeSpy).toHaveBeenCalledWith(
+				"Failed to delete task: this note changed in the editor; the timeline is refreshing — try again.",
+			);
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"- [ ] Pay the rent today\n",
+			);
+		});
+	});
+
 	it("rejects and shows the reason when a delete fails", async () => {
 		const { previous } = await renderAdaptor("- [ ] Pay rent\n");
 

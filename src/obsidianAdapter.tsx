@@ -13,7 +13,12 @@ import {
 	useState,
 } from "react";
 import { ObsidianSettingRepo } from "./settingsRepo";
-import { ObsidianTasksRepo, taskUpdateNeedsWrite } from "./tasksRepo";
+import {
+	keepRecurrenceDroppedByModal,
+	ObsidianTasksRepo,
+	taskUpdateNeedsWrite,
+} from "./tasksRepo";
+import { StaleTaskError } from "./taskLine";
 import { ObsidianSecretField } from "./secretField";
 import { createRenderTitle } from "./titleRenderer";
 import { App, debounce, Notice, Pos, requestUrl, TFile } from "obsidian";
@@ -31,10 +36,18 @@ const OBSIDIAN_AI_SYSTEM_PROMPT = `You are operating inside an Obsidian vault wh
 - When changing existing tasks, preserve vault-specific metadata and unrelated task fields. Use task IDs returned by query results rather than inventing IDs or relying only on title text.
 - If multiple tasks could match the user's intent, ask the user to choose or narrow the scope before destructive or bulk changes.`;
 
-const describeFailure = (action: string, error: unknown): string =>
-	error instanceof Error
+/** The stale-id error tells AI clients to query again; users get this. */
+const STALE_TASK_IN_VIEW =
+	"this note changed in the editor; the timeline is refreshing — try again.";
+
+const describeFailure = (action: string, error: unknown): string => {
+	if (error instanceof StaleTaskError) {
+		return `Failed to ${action}: ${STALE_TASK_IN_VIEW}`;
+	}
+	return error instanceof Error
 		? `Failed to ${action}: ${error.message}`
 		: `Failed to ${action}.`;
+};
 
 const handleItemClick = (item: Task, app: App) => {
 	if (!item.extra?.file) {
@@ -209,6 +222,16 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 		};
 	}, [plugin]);
 
+	// The task's note changed after the timeline loaded it: reload so the
+	// user can retry on current data.
+	const refreshAfterStale = (error: unknown, task: Task) => {
+		if (!(error instanceof StaleTaskError)) return;
+		if (task.extra?.file) {
+			stableTasksRepo.current.invalidateFile(task.extra.file);
+		}
+		void loadTasks();
+	};
+
 	// Task CRUD handlers. Each rethrows after notifying so its caller (the
 	// timeline UI or an AI tool) reports the failure instead of success.
 	const handleTaskAdded = async (task: Task): Promise<Task> => {
@@ -230,15 +253,19 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 
 	const handleTaskUpdated = async (task: Task, previous: Task) => {
 		try {
-			if (!taskUpdateNeedsWrite(task, previous)) {
+			const incoming = keepRecurrenceDroppedByModal(task, previous);
+			if (!taskUpdateNeedsWrite(incoming, previous)) {
 				return;
 			}
-			await stableTasksRepo.current.updateTask(task);
+			await stableTasksRepo.current.updateTask(incoming);
 			// Update local state only after successful save
-			setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+			setTasks((prev) =>
+				prev.map((t) => (t.id === incoming.id ? incoming : t)),
+			);
 		} catch (error) {
 			console.error("Failed to update task:", error);
 			new Notice(describeFailure("update task", error));
+			refreshAfterStale(error, previous);
 			throw error;
 		}
 	};
@@ -251,6 +278,7 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 		} catch (error) {
 			console.error("Failed to delete task:", error);
 			new Notice(describeFailure("delete task", error));
+			refreshAfterStale(error, previous);
 			throw error;
 		}
 	};

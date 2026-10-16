@@ -125,10 +125,15 @@ export function locateTaskBlock(
 	return start === -1 ? undefined : { start, count: expectedLines.length };
 }
 
-export function staleTaskError(id: string): Error {
-	return new Error(
-		`Task ${id} changed since it was read — query tasks again.`,
-	);
+/** The task an id names changed since the id was handed out. */
+export class StaleTaskError extends Error {
+	readonly taskId: string;
+
+	constructor(taskId: string) {
+		super(`Task ${taskId} changed since it was read — query tasks again.`);
+		this.name = "StaleTaskError";
+		this.taskId = taskId;
+	}
 }
 
 /** The file path of a stored task id (`path:line:col`). */

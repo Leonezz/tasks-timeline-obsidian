@@ -1,6 +1,7 @@
 import { taskToMarkdown, type Task } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "../../src/main";
 import {
+	keepRecurrenceDroppedByModal,
 	ObsidianTasksRepo,
 	taskUpdateNeedsWrite,
 } from "../../src/tasksRepo";
@@ -499,5 +500,46 @@ describe("ObsidianTasksRepo multi-line tasks", () => {
 			"changed since it was read",
 		);
 		await expect(app.vault.cachedRead(file)).resolves.toBe(edited);
+	});
+});
+
+describe("keepRecurrenceDroppedByModal", () => {
+	const previous: Task = {
+		id: "Tasks.md:0:0",
+		title: "Water plants",
+		status: "todo",
+		priority: "medium",
+		tags: [],
+		recurringInterval: "every day",
+	};
+
+	it("restores the rule a v0.8.0 modal save dropped", () => {
+		const saved = { ...previous, recurringInterval: undefined };
+
+		expect(keepRecurrenceDroppedByModal(saved, previous)).toEqual(previous);
+	});
+
+	it.each([
+		["the switch turned off", { isRecurring: false, recurringInterval: undefined }],
+		["the AI clearing it", { isRecurring: undefined, recurringInterval: undefined }],
+		["an empty rule", { recurringInterval: "" }],
+		["a null rule", { isRecurring: true, recurringInterval: null as unknown as string }],
+	])("leaves an explicit removal by %s alone", (_how, changes) => {
+		const saved = { ...previous, ...changes };
+
+		expect(keepRecurrenceDroppedByModal(saved, previous)).toBe(saved);
+	});
+
+	it("does nothing for a modal that returns the rule (components > v0.8.0)", () => {
+		const saved = { ...previous, isRecurring: true, title: "Water" };
+
+		expect(keepRecurrenceDroppedByModal(saved, previous)).toBe(saved);
+	});
+
+	it("does nothing for a task that was not recurring", () => {
+		const plain = { ...previous, recurringInterval: undefined };
+		const saved = { ...plain, title: "Water" };
+
+		expect(keepRecurrenceDroppedByModal(saved, plain)).toBe(saved);
 	});
 });

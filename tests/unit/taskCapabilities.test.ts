@@ -143,8 +143,9 @@ describe("createObsidianCapabilityContext keeps task data current (MCP)", () => 
 			id: "Tasks.md:0:0",
 		});
 
-		expect(result).toMatchObject({
-			error: expect.stringMatching(/changed since it was read/),
+		// Worded for the AI client, unlike the timeline's notice.
+		expect(result).toEqual({
+			error: "Task Tasks.md:0:0 changed since it was read — query tasks again.",
 		});
 		await expect(app.vault.cachedRead(file)).resolves.toBe(
 			`${DONE}\n${NEXT}\n`,
@@ -307,6 +308,24 @@ describe("createObsidianCapabilityContext with a described task (MCP)", () => {
 		expect(result).toMatchObject({ success: true });
 		await expect(app.vault.cachedRead(file)).resolves.toBe(
 			"- [ ] Existing\n",
+		);
+	});
+});
+
+describe("createObsidianCapabilityContext recurrence (MCP)", () => {
+	it("clears 🔁 when update_task clears the recurrence", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(
+			"- [ ] Water plants 📅 2026-10-16 🔁 every day\n",
+		);
+
+		const { result } = await capabilities.executeTool("update_task", {
+			id: "Tasks.md:0:0",
+			recurrence: "",
+		});
+
+		expect(result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Water plants 📅 2026-10-16\n",
 		);
 	});
 });

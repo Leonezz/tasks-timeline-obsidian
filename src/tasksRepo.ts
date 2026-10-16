@@ -24,7 +24,7 @@ import {
 	locateTaskBlock,
 	locateTaskLine,
 	snapshotOf,
-	staleTaskError,
+	StaleTaskError,
 	TaskSnapshot,
 } from "./taskLine";
 import {
@@ -77,6 +77,30 @@ export function taskUpdateNeedsWrite(task: Task, previous: Task): boolean {
 		);
 	}
 	return false;
+}
+
+/**
+ * Compatibility shim for @tasks-timeline/components <= v0.8.0, whose edit
+ * modal saves `recurringInterval: undefined` unless its recurrence switch was
+ * touched. Tasks read from the vault carry their 🔁 rule in
+ * `recurringInterval` but never set `isRecurring`, so every modal save would
+ * erase the rule from the note.
+ *
+ * Keeps the previous rule when the incoming task has none and no
+ * `isRecurring` key at all, which only that untouched switch produces.
+ * Explicit removal still clears it: the switch turned off sets
+ * `isRecurring: false`, and the AI tools set the `isRecurring` key when they
+ * clear a recurrence. Newer modals return the rule unchanged, so this then
+ * does nothing.
+ */
+export function keepRecurrenceDroppedByModal(task: Task, previous: Task): Task {
+	const dropped =
+		previous.recurringInterval !== undefined &&
+		task.recurringInterval === undefined &&
+		!("isRecurring" in task);
+	return dropped
+		? { ...task, recurringInterval: previous.recurringInterval }
+		: task;
 }
 
 export class ObsidianTasksRepo implements TaskRepository {
@@ -233,7 +257,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 			snapshot !== undefined &&
 			isSameTaskLine(currentLine, snapshot.rawText);
 		if (snapshot && !unchanged) {
-			throw staleTaskError(id);
+			throw new StaleTaskError(id);
 		}
 		if (!current) {
 			return null;
@@ -459,7 +483,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 		});
 
 		if (outcome.writtenLine === undefined) {
-			throw staleTaskError(task.id);
+			throw new StaleTaskError(task.id);
 		}
 		// Remember the written line so a follow-up update of the same task
 		// (e.g. leaving inline edit mode) still matches before the next load.
@@ -507,7 +531,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 		});
 
 		if (outcome.expectedContent === undefined) {
-			throw staleTaskError(id);
+			throw new StaleTaskError(id);
 		}
 
 		const persistedContent = await this.plugin.app.vault.read(file);
