@@ -550,6 +550,20 @@ describe("ObsidianTasksRepo multi-line tasks", () => {
 			"- [ ] Keep\n# Next section\n",
 		);
 	});
+
+	it("deletes a task followed by a %% comment block", async () => {
+		const { app, file, repo } = createRepo(
+			"- [ ] Keep\n- [ ] Delete me\n%%\nhidden note\n%%\n",
+		);
+		const tasks = await repo.loadTasks();
+		expect(tasks[1]?.extra?.rawText).toBe("- [ ] Delete me");
+
+		await repo.deleteTask("Tasks.md:1:0");
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Keep\n%%\nhidden note\n%%\n",
+		);
+	});
 });
 
 describe("keepRecurrenceDroppedByModal", () => {

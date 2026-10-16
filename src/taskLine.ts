@@ -161,6 +161,11 @@ const LIST_MARKER = /^([-*+]|\d+[.)])(?:[ \t]|$)/;
 const ATX_HEADING = /^#{1,6}(?:[ \t]|$)/;
 const THEMATIC_BREAK = /^([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
 const CODE_FENCE = /^(?:`{3,}|~{3,})/;
+/**
+ * The first line of an Obsidian `%%` comment block: `%%` with no other `%`
+ * on the line. A line such as `%% c %%` is inline text instead.
+ */
+const COMMENT_BLOCK = /^%%[^%]*$/;
 
 /** A line's quote depth, indentation width and text after both. */
 function lineShape(line: string): {
@@ -188,7 +193,7 @@ function contentColumn(item: { indent: number; text: string }): number {
  * Whether the lines from `after` on continue the list item on `taskLine`,
  * the way Obsidian's index extends an item:
  * - the next line, when indented to the item's text or as lazy text, unless
- *   it starts a heading, thematic break or code fence;
+ *   it starts a heading, thematic break, code fence or `%%` comment block;
  * - a line after blank lines, when indented to the item's text.
  *
  * Only lines in the item's quote depth count, and list items never do
@@ -220,7 +225,8 @@ function continuesItem(
 	const isLazyText =
 		!ATX_HEADING.test(text) &&
 		!THEMATIC_BREAK.test(text) &&
-		!CODE_FENCE.test(text);
+		!CODE_FENCE.test(text) &&
+		!COMMENT_BLOCK.test(text);
 	return nextIndex === 0 && isLazyText;
 }
 

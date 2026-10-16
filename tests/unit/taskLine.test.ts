@@ -62,6 +62,10 @@ const COUNTED: IndexedNote[] = [
 	{ name: "a sub-task's lazy line", content: "- [ ] Parent\n\t- [ ] Child\nlazy\n", item: [1, 2] },
 	{ name: "a sub-task's lazy line, one space", content: "- [ ] Parent\n\t- [ ] Child\n desc\n", item: [1, 2] },
 	{ name: "a line ending in CRLF", content: "- [ ] Task\r\n\tdesc\r\n- [ ] Next\r\n", item: [0, 1] },
+	{ name: "a one-line comment", content: "- [ ] Task\n%% c %%\n", item: [0, 1] },
+	{ name: "a comment marker followed by a percent sign", content: "- [ ] Task\n%% 50% done\n", item: [0, 1] },
+	{ name: "a comment block indented to the content", content: "- [ ] Task\n  %%\n  c\n  %%\n", item: [0, 3] },
+	{ name: "a comment block after a blank line", content: "- [ ] Task\n\n  %%\n  c\n  %%\n", item: [0, 4] },
 ];
 
 /** Lines that end the task's item. */
@@ -90,6 +94,17 @@ const NOT_COUNTED: IndexedNote[] = [
 	{ name: "a quote that a blank line ended", content: "> - [ ] Task\n\n> \tpara\n", item: [0, 0] },
 	{ name: "an under-indented quoted paragraph", content: "> - [ ] Task\n>\n>  one\n", item: [0, 0] },
 	{ name: "the parent's paragraph after a sub-task", content: "- [ ] Parent\n\t- [ ] Child\n\n\tmore\n", item: [1, 1] },
+	{ name: "a comment block", content: "- [ ] Task\n%%\nc\n%%\n", item: [0, 0] },
+	{ name: "a comment block after a sibling", content: "- [ ] Keep\n- [ ] Delete me\n%%\nhidden note\n%%\n", item: [1, 1] },
+	{ name: "a comment block with text on its first line", content: "- [ ] Task\n%% open\nc\n%%\n", item: [0, 0] },
+	{ name: "an unclosed comment block", content: "- [ ] Task\n%%  \n", item: [0, 0] },
+	{ name: "a comment block indented by one space", content: "- [ ] Task\n %%\n", item: [0, 0] },
+	{ name: "a comment block after a description", content: "- [ ] Task\n\tdesc\n%%\nc\n%%\n", item: [0, 1] },
+	{ name: "a quoted comment block", content: "> - [ ] Task\n> %%\n> c\n> %%\n", item: [0, 0] },
+	{ name: "a callout comment block", content: "> [!todo] Inbox\n> - [ ] Task\n> %%\n> c\n> %%\n", item: [1, 1] },
+	{ name: "a tab-indented comment block after a sub-task", content: "- [ ] Parent\n\t- [ ] Child\n\t%%\n\tc\n\t%%\n", item: [1, 1] },
+	{ name: "a space-indented comment block after a sub-task", content: "- [ ] Parent\n\t- [ ] Child\n  %%\n  c\n  %%\n", item: [1, 1] },
+	{ name: "a numbered task's comment block", content: "1. [ ] Task\n  %%\n", item: [0, 0] },
 ];
 
 describe("locateTaskBlock", () => {
