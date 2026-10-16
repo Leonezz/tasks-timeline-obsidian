@@ -44,10 +44,10 @@ async function renderAdaptor(content: string) {
 		bus: { on: () => () => undefined, emit: () => undefined },
 	} as unknown as TasksTimelineObsidianPlugin;
 
-	render(<ObsidianAdaptor plugin={plugin} />);
+	const { unmount } = render(<ObsidianAdaptor plugin={plugin} />);
 	await waitFor(() => expect(mockAppProps?.tasks.length).toBeGreaterThan(0));
 	const props = mockAppProps!;
-	return { app, file, props, previous: props.tasks[0]! };
+	return { app, file, props, previous: props.tasks[0]!, unmount };
 }
 
 describe("ObsidianAdaptor task handlers", () => {
@@ -240,14 +240,11 @@ describe("ObsidianAdaptor task handlers", () => {
 	});
 
 	describe("when the note changed since the timeline loaded", () => {
-		const changeNote = async (
+		const changeNote = (
 			app: obsidian.App,
 			file: obsidian.TFile,
 			content: string,
-		) => {
-			await app.vault.modify(file, content);
-			indexFile(app, file.path, content);
-		};
+		) => editExternally(app, file.path, content);
 
 		it("asks the user to retry and refreshes the timeline", async () => {
 			const { app, file, previous } = await renderAdaptor("- [ ] Pay rent\n");
@@ -281,6 +278,93 @@ describe("ObsidianAdaptor task handlers", () => {
 				"- [ ] Pay the rent today\n",
 			);
 		});
+	});
+
+	describe("when the editor saves a note before Obsidian re-indexes it", () => {
+		const STALE_NOTICE =
+			"this note changed in the editor; the timeline is refreshing — reopen the task and try again.";
+
+		// An autosave: vault "modify" now, the metadata only after re-indexing.
+		const saveInEditor = (
+			app: obsidian.App,
+			file: obsidian.TFile,
+			content: string,
+		) => app.vault.modify(file, content);
+
+		async function reindex(app: obsidian.App, file: obsidian.TFile) {
+			indexFile(app, file.path, await app.vault.cachedRead(file));
+			app.metadataCache.trigger("changed", file);
+			app.metadataCache.trigger("resolved");
+		}
+
+		it("refreshes from the re-indexed note after a stale edit", async () => {
+			const { app, file, previous } = await renderAdaptor("- [ ] Pay rent\n");
+			await saveInEditor(app, file, "# Bills\n- [ ] Pay rent today\n");
+
+			await expect(
+				mockAppProps!.onTaskUpdated(
+					{ ...previous, status: "done" },
+					previous,
+				),
+			).rejects.toThrow("changed since it was read");
+			expect(noticeSpy).toHaveBeenCalledWith(
+				`Failed to update task: ${STALE_NOTICE}`,
+			);
+
+			// The note is not parsed with the old list item positions meanwhile.
+			await new Promise((resolve) => setTimeout(resolve, 50));
+			expect(mockAppProps!.tasks.map((t) => t.title)).toEqual(["Pay rent"]);
+
+			await reindex(app, file);
+			await waitFor(
+				() =>
+					expect(mockAppProps!.tasks.map((t) => t.title)).toEqual([
+						"Pay rent today",
+					]),
+				{ timeout: 2000 },
+			);
+		});
+
+		it("refuses to delete a task that gained a description line, then deletes both once re-indexed", async () => {
+			const { app, file, previous } = await renderAdaptor(
+				"- [ ] Pay rent\n- [ ] Water plants\n",
+			);
+			const edited = "- [ ] Pay rent\n\tBank transfer\n- [ ] Water plants\n";
+			await saveInEditor(app, file, edited);
+
+			await expect(
+				mockAppProps!.onTaskDeleted(previous.id, previous),
+			).rejects.toThrow("changed since it was read");
+			expect(noticeSpy).toHaveBeenCalledWith(
+				`Failed to delete task: ${STALE_NOTICE}`,
+			);
+			await expect(app.vault.cachedRead(file)).resolves.toBe(edited);
+
+			await reindex(app, file);
+			await waitFor(
+				() =>
+					expect(mockAppProps!.tasks[0]?.extra?.rawText).toBe(
+						"- [ ] Pay rent\n\tBank transfer",
+					),
+				{ timeout: 2000 },
+			);
+			const current = mockAppProps!.tasks[0]!;
+			await mockAppProps!.onTaskDeleted(current.id, current);
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"- [ ] Water plants\n",
+			);
+		});
+	});
+
+	it("stops watching the vault when the timeline closes", async () => {
+		const { app, unmount } = await renderAdaptor("- [ ] Pay rent\n");
+		expect(app.metadataCache._listenerCount()).toBeGreaterThan(0);
+
+		unmount();
+
+		expect(app.vault._listenerCount()).toBe(0);
+		expect(app.metadataCache._listenerCount()).toBe(0);
 	});
 
 	it("refuses to save an editor copy opened before the timeline reloaded", async () => {
@@ -337,6 +421,7 @@ describe("ObsidianAdaptor task handlers", () => {
 			shown: Task,
 		): Promise<Task> {
 			indexFile(app, file.path, await app.vault.cachedRead(file));
+			app.metadataCache.trigger("changed", file);
 			app.metadataCache.trigger("resolved");
 			await waitFor(() => expect(mockAppProps?.tasks[0]).not.toBe(shown), {
 				timeout: 2000,

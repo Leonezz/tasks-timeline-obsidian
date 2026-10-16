@@ -130,10 +130,10 @@ export class ObsidianTasksRepo implements TaskRepository {
 	}
 
 	/**
-	 * Keeps cached tasks in step with the vault, for consumers that do not
-	 * reload on vault events themselves (the MCP server). A modified note is
-	 * read only after Obsidian re-indexes it ("changed"): before that its new
-	 * content does not match the list item positions in the metadata cache.
+	 * Keeps cached tasks in step with the vault (used by the timeline view and
+	 * the MCP server). A modified note is read only after Obsidian re-indexes
+	 * it ("changed"): before that its new content does not match the list
+	 * item positions in the metadata cache.
 	 *
 	 * @returns a function that removes the listeners
 	 */
