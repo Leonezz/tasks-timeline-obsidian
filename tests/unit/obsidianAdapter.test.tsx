@@ -3,7 +3,7 @@ import type { Task } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "../../src/main";
 import { ObsidianAdaptor } from "../../src/obsidianAdapter";
 import * as obsidian from "../mocks/obsidian";
-import { indexFile } from "../helpers/testHelpers";
+import { editExternally, indexFile } from "../helpers/testHelpers";
 
 interface CapturedAppProps {
 	tasks: Task[];
@@ -260,7 +260,7 @@ describe("ObsidianAdaptor task handlers", () => {
 				),
 			).rejects.toThrow("changed since it was read — query tasks again");
 			expect(noticeSpy).toHaveBeenCalledWith(
-				"Failed to update task: this note changed in the editor; the timeline is refreshing — try again.",
+				"Failed to update task: this note changed in the editor; the timeline is refreshing — reopen the task and try again.",
 			);
 			await waitFor(() =>
 				expect(mockAppProps?.tasks[0]?.title).toBe("Pay the rent today"),
@@ -275,12 +275,71 @@ describe("ObsidianAdaptor task handlers", () => {
 				mockAppProps!.onTaskDeleted(previous.id, previous),
 			).rejects.toThrow("changed since it was read");
 			expect(noticeSpy).toHaveBeenCalledWith(
-				"Failed to delete task: this note changed in the editor; the timeline is refreshing — try again.",
+				"Failed to delete task: this note changed in the editor; the timeline is refreshing — reopen the task and try again.",
 			);
 			await expect(app.vault.cachedRead(file)).resolves.toBe(
 				"- [ ] Pay the rent today\n",
 			);
 		});
+	});
+
+	it("refuses to save an editor copy opened before the timeline reloaded", async () => {
+		const { app, file, previous: editorCopy } = await renderAdaptor(
+			"- [ ] Pay rent\n- [ ] Water plants 🔁 every day\n",
+		);
+		// "Pay rent" is deleted in the editor; the timeline reloads, so its id
+		// now names "Water plants".
+		const changed = "- [ ] Water plants 🔁 every day\n";
+		await editExternally(app, "Tasks.md", changed);
+		app.metadataCache.trigger("resolved");
+		await waitFor(
+			() => expect(mockAppProps?.tasks[0]?.title).toBe("Water plants"),
+			{ timeout: 2000 },
+		);
+		const current = mockAppProps!.tasks[0]!;
+
+		// v0.8.0's modal saves the copy with its recurrence switch untouched.
+		await expect(
+			mockAppProps!.onTaskUpdated(
+				{ ...editorCopy, status: "done", recurringInterval: undefined },
+				current,
+			),
+		).rejects.toThrow("changed since it was read");
+		expect(noticeSpy).toHaveBeenCalledWith(
+			"Failed to update task: this note changed in the editor; the timeline is refreshing — reopen the task and try again.",
+		);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(changed);
+	});
+
+	it("applies a second edit of the same task before the timeline reloads", async () => {
+		const { app, file, previous } = await renderAdaptor("- [ ] Draft\n");
+
+		await mockAppProps!.onTaskUpdated(
+			{ ...previous, title: "Draft title" },
+			previous,
+		);
+		const afterFirst = mockAppProps!.tasks[0]!;
+		await mockAppProps!.onTaskUpdated(
+			{ ...afterFirst, title: "Final title" },
+			afterFirst,
+		);
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Final title\n",
+		);
+	});
+
+	it("refuses to delete a task with sub-tasks", async () => {
+		const content = "- [ ] Parent\n\t- [ ] Child\n";
+		const { app, file, previous } = await renderAdaptor(content);
+
+		await expect(
+			mockAppProps!.onTaskDeleted(previous.id, previous),
+		).rejects.toThrow("it has sub-tasks");
+		expect(noticeSpy).toHaveBeenCalledWith(
+			"Failed to delete task: Cannot delete task: it has sub-tasks or other nested items — delete or move them first.",
+		);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
 	});
 
 	it("rejects and shows the reason when a delete fails", async () => {

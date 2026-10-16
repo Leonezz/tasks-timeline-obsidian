@@ -20,6 +20,7 @@ import TasksTimelineObsidianPlugin from "./main";
 import { Link } from "./link";
 import {
 	filePathOfTaskId,
+	hasNestedItems,
 	isSameTaskLine,
 	locateTaskBlock,
 	locateTaskLine,
@@ -457,7 +458,20 @@ export class ObsidianTasksRepo implements TaskRepository {
 		if (!(file instanceof TFile)) {
 			throw new Error(`Cannot update task: file not found: ${filePath}`);
 		}
-		const expectedLine = snapshot?.rawText || task.extra?.rawText;
+		// The caller's copy must be of the task the id names now. After a
+		// reload the id can name another task that moved onto its line, and
+		// a copy read before (e.g. in an open editor) must not overwrite it.
+		// Copies from before this repository's own writes are still current.
+		const callerLine = task.extra?.rawText;
+		if (
+			snapshot &&
+			callerLine &&
+			!isSameTaskLine(callerLine, snapshot.rawText) &&
+			!isSameTaskLine(callerLine, snapshot.loadedText)
+		) {
+			throw new StaleTaskError(task.id);
+		}
+		const expectedLine = snapshot?.rawText || callerLine;
 		if (!expectedLine) {
 			throw new Error(
 				`Cannot update task: ${task.id} was never read from the vault — query tasks again.`,
@@ -492,6 +506,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 		this.taskCache.set(task.id, {
 			file: filePath,
 			rawText: [outcome.writtenLine, ...descriptionLines].join("\n"),
+			loadedText: snapshot?.loadedText ?? expectedLine,
 			position: position ?? "",
 		});
 		this.invalidateFile(filePath);
@@ -510,7 +525,8 @@ export class ObsidianTasksRepo implements TaskRepository {
 			);
 		}
 
-		const outcome: { expectedContent?: string } = {};
+		const outcome: { expectedContent?: string; hasNestedItems?: boolean } =
+			{};
 		await this.plugin.app.vault.process(file, (content) => {
 			const lines = content.split("\n");
 			// Remove the description lines too, or they would join the
@@ -523,6 +539,12 @@ export class ObsidianTasksRepo implements TaskRepository {
 			if (!block) {
 				return content;
 			}
+			// Refuse rather than delete or re-indent the sub-tasks: either
+			// would change tasks the caller did not ask to change.
+			if (hasNestedItems(lines, block.start, block.start + block.count)) {
+				outcome.hasNestedItems = true;
+				return content;
+			}
 			outcome.expectedContent = [
 				...lines.slice(0, block.start),
 				...lines.slice(block.start + block.count),
@@ -530,6 +552,11 @@ export class ObsidianTasksRepo implements TaskRepository {
 			return outcome.expectedContent;
 		});
 
+		if (outcome.hasNestedItems) {
+			throw new Error(
+				"Cannot delete task: it has sub-tasks or other nested items — delete or move them first.",
+			);
+		}
 		if (outcome.expectedContent === undefined) {
 			throw new StaleTaskError(id);
 		}

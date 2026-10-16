@@ -7,7 +7,10 @@ import type { Task } from "@tasks-timeline/components";
  */
 export interface TaskSnapshot {
 	file: string;
+	/** The line as this repository knows it, including its own writes. */
 	rawText: string;
+	/** The line as last read from the vault, before this repository's writes. */
+	loadedText: string;
 	position: string;
 }
 
@@ -17,7 +20,12 @@ export function snapshotOf(task: Task): TaskSnapshot | undefined {
 	if (!file || !rawText) {
 		return undefined;
 	}
-	return { file, rawText, position: task.extra?.position || "" };
+	return {
+		file,
+		rawText,
+		loadedText: rawText,
+		position: task.extra?.position || "",
+	};
 }
 
 const LIST_ITEM = /^([-*+]|\d+[.)])\s/;
@@ -123,6 +131,49 @@ export function locateTaskBlock(
 	const expectedLines = blockLines(expected);
 	const start = locate(lines, expectedLines, position);
 	return start === -1 ? undefined : { start, count: expectedLines.length };
+}
+
+const indentWidth = (whitespace: string): number =>
+	[...whitespace].reduce((width, c) => width + (c === "\t" ? 4 : 1), 0);
+
+/** A line's quote depth, indentation width and text after both. */
+function lineShape(line: string): {
+	quoteDepth: number;
+	indent: number;
+	text: string;
+} {
+	const quote = line.match(/^(?:[ \t]*>[ ]?)*/)?.[0] ?? "";
+	const afterQuote = line.slice(quote.length);
+	const indentation = afterQuote.match(/^[ \t]*/)?.[0] ?? "";
+	return {
+		quoteDepth: (quote.match(/>/g) ?? []).length,
+		indent: indentWidth(indentation),
+		text: afterQuote.slice(indentation.length),
+	};
+}
+
+/**
+ * Whether list items are nested under the task on `taskLine`, whose own
+ * lines end before `after`. Removing the task would leave them indented
+ * under nothing, which Obsidian reads as a code block or paragraph text, so
+ * they would drop off the timeline.
+ */
+export function hasNestedItems(
+	lines: readonly string[],
+	taskLine: number,
+	after: number,
+): boolean {
+	const task = lineShape(lines[taskLine] ?? "");
+	const next = lines
+		.slice(after)
+		.map(lineShape)
+		.find((shape) => shape.text.trim() !== "");
+	return (
+		next !== undefined &&
+		next.quoteDepth === task.quoteDepth &&
+		next.indent > task.indent &&
+		LIST_ITEM.test(next.text)
+	);
 }
 
 /** The task an id names changed since the id was handed out. */

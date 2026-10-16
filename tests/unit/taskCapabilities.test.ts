@@ -329,3 +329,19 @@ describe("createObsidianCapabilityContext recurrence (MCP)", () => {
 		);
 	});
 });
+
+describe("createObsidianCapabilityContext with sub-tasks (MCP)", () => {
+	it("refuses to delete a parent task", async () => {
+		const content = "- [ ] Parent\n\t- [ ] Child\n";
+		const { app, file, capabilities } = createMcpCapabilities(content);
+
+		const { result } = await capabilities.executeTool("delete_task", {
+			id: "Tasks.md:0:0",
+		});
+
+		expect(result).toEqual({
+			error: "Cannot delete task: it has sub-tasks or other nested items — delete or move them first.",
+		});
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+});

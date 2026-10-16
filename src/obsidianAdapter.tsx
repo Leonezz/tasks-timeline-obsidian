@@ -18,7 +18,7 @@ import {
 	ObsidianTasksRepo,
 	taskUpdateNeedsWrite,
 } from "./tasksRepo";
-import { StaleTaskError } from "./taskLine";
+import { isSameTaskLine, StaleTaskError } from "./taskLine";
 import { ObsidianSecretField } from "./secretField";
 import { createRenderTitle } from "./titleRenderer";
 import { App, debounce, Notice, Pos, requestUrl, TFile } from "obsidian";
@@ -38,7 +38,7 @@ const OBSIDIAN_AI_SYSTEM_PROMPT = `You are operating inside an Obsidian vault wh
 
 /** The stale-id error tells AI clients to query again; users get this. */
 const STALE_TASK_IN_VIEW =
-	"this note changed in the editor; the timeline is refreshing — try again.";
+	"this note changed in the editor; the timeline is refreshing — reopen the task and try again.";
 
 const describeFailure = (action: string, error: unknown): string => {
 	if (error instanceof StaleTaskError) {
@@ -253,6 +253,14 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 
 	const handleTaskUpdated = async (task: Task, previous: Task) => {
 		try {
+			// An editor opened before a reload saves a copy of what the id
+			// named then; `previous` is what it names now. Refuse before
+			// anything (like the 🔁 shim) mixes the two tasks.
+			const copyLine = task.extra?.rawText;
+			const currentLine = previous.extra?.rawText;
+			if (copyLine && currentLine && !isSameTaskLine(copyLine, currentLine)) {
+				throw new StaleTaskError(task.id);
+			}
 			const incoming = keepRecurrenceDroppedByModal(task, previous);
 			if (!taskUpdateNeedsWrite(incoming, previous)) {
 				return;

@@ -241,22 +241,37 @@ export function createTestScenario(name: 'basic' | 'complex' | 'edge-cases'): Te
 	return vault;
 }
 
-/** A task line, optionally inside blockquotes/callouts (`> `, `> > `). */
-const TASK_LINE = /^((?:> ?)*)- \[([^\]])\] /;
+/** A task line, optionally inside quotes/callouts (`> `) and indented. */
+const TASK_LINE = /^((?:> ?)*)([ \t]*)- \[([^\]])\] /;
 const LIST_ITEM = /^\s*([-*+]|\d+[.)])\s/;
 
-/** An indented, non-list line inside the same quote continues the item. */
-function continuesItem(line: string | undefined, quote: string): boolean {
+const indentWidth = (whitespace: string) =>
+	[...whitespace].reduce((width, c) => width + (c === "\t" ? 4 : 1), 0);
+
+/**
+ * A non-list line inside the same quote, indented deeper than the item,
+ * continues it (a description line).
+ */
+function continuesItem(
+	line: string | undefined,
+	quote: string,
+	indent: string,
+): boolean {
 	if (line === undefined || !line.startsWith(quote)) return false;
 	const rest = line.slice(quote.length);
-	return /^\s+\S/.test(rest) && !LIST_ITEM.test(rest);
+	const leading = rest.match(/^[ \t]*/)?.[0] ?? "";
+	return (
+		rest.trim() !== "" &&
+		indentWidth(leading) > indentWidth(indent) &&
+		!LIST_ITEM.test(rest)
+	);
 }
 
 /**
- * Builds list item metadata for every top-level task line, positioned like
- * Obsidian's parser: inside a quote the item starts after the `> ` prefix
- * (start.col 2, or 4 for `> > `), and indented description lines below it
- * extend the item's end.
+ * Builds list item metadata for every task line, positioned like Obsidian's
+ * parser: the item starts after any `> ` prefix and indentation (start.col 2
+ * for `> - [ ]`, 1 for a tab-indented sub-task), and description lines
+ * indented below it extend the item's end.
  */
 export function createListItems(content: string): ListItemCache[] {
 	const lines = content.split("\n");
@@ -274,8 +289,10 @@ export function createListItems(content: string): ListItemCache[] {
 			return [];
 		}
 		const quote = match[1]!;
+		const indent = match[2]!;
+		const startCol = quote.length + indent.length;
 		let endLine = lineNumber;
-		while (continuesItem(lines[endLine + 1], quote)) {
+		while (continuesItem(lines[endLine + 1], quote, indent)) {
 			endLine++;
 		}
 		const endText = lines[endLine]!;
@@ -285,8 +302,8 @@ export function createListItems(content: string): ListItemCache[] {
 				position: {
 					start: {
 						line: lineNumber,
-						col: quote.length,
-						offset: lineStarts[lineNumber]! + quote.length,
+						col: startCol,
+						offset: lineStarts[lineNumber]! + startCol,
 					},
 					end: {
 						line: endLine,
@@ -295,7 +312,7 @@ export function createListItems(content: string): ListItemCache[] {
 					},
 				},
 				parent: -1,
-				task: match[2]!,
+				task: match[3]!,
 			},
 		];
 	});

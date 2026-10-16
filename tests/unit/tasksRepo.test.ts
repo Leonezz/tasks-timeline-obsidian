@@ -543,3 +543,68 @@ describe("keepRecurrenceDroppedByModal", () => {
 		expect(keepRecurrenceDroppedByModal(saved, plain)).toBe(saved);
 	});
 });
+
+describe("ObsidianTasksRepo with a copy read before a reload", () => {
+	it("refuses to write a stale copy over the task now on its line", async () => {
+		const { app, file, repo } = createRepo(
+			"- [ ] Pay rent\n- [ ] Water plants 🔁 every day\n",
+		);
+		const [editorCopy] = await repo.loadTasks();
+		// "Pay rent" is deleted in the editor; the timeline reloads.
+		const changed = "- [ ] Water plants 🔁 every day\n";
+		await app.vault.modify(file, changed);
+		indexFile(app, "Tasks.md", changed);
+		repo.invalidateFile("Tasks.md");
+		await repo.loadTasks();
+
+		await expect(
+			repo.updateTask({ ...editorCopy!, status: "done" }),
+		).rejects.toThrow("Task Tasks.md:0:0 changed since it was read");
+		await expect(app.vault.cachedRead(file)).resolves.toBe(changed);
+	});
+});
+
+describe("ObsidianTasksRepo deleting a task with sub-tasks", () => {
+	it.each([
+		["spaces", "- [ ] Parent\n    - [ ] Child\n- [ ] After\n", "Tasks.md:0:0"],
+		["tabs", "- [ ] Parent\n\t- [ ] Child\n- [ ] After\n", "Tasks.md:0:0"],
+		["a callout", "> [!todo] Inbox\n> - [ ] Parent\n> \t- [ ] Child\n", "Tasks.md:1:2"],
+		["a description and a sub-task", "- [ ] Parent\n\tNotes\n\t- [ ] Child\n", "Tasks.md:0:0"],
+		["a plain sub-bullet", "- [ ] Parent\n\t- A note\n", "Tasks.md:0:0"],
+		["a blank line before the sub-task", "- [ ] Parent\n\n\t- [ ] Child\n", "Tasks.md:0:0"],
+	])("refuses when it has nested items (%s)", async (_kind, content, id) => {
+		const { app, file, repo } = createRepo(content);
+		await repo.loadTasks();
+
+		await expect(repo.deleteTask(id)).rejects.toThrow(
+			"Cannot delete task: it has sub-tasks or other nested items — delete or move them first.",
+		);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+
+	it("still deletes the sub-task itself", async () => {
+		const { app, file, repo } = createRepo(
+			"- [ ] Parent\n\t- [ ] Child\n- [ ] After\n",
+		);
+		await repo.loadTasks();
+
+		await repo.deleteTask("Tasks.md:1:1");
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Parent\n- [ ] After\n",
+		);
+	});
+
+	it("deletes a task followed by a less indented sibling", async () => {
+		const { app, file, repo } = createRepo(
+			"- [ ] Parent\n\t- [ ] Child\n- [ ] After\n",
+		);
+		await repo.loadTasks();
+
+		await repo.deleteTask("Tasks.md:2:0");
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Parent\n\t- [ ] Child\n",
+		);
+	});
+});
