@@ -13,7 +13,7 @@ import {
 	useState,
 } from "react";
 import { ObsidianSettingRepo } from "./settingsRepo";
-import { ObsidianTasksRepo } from "./tasksRepo";
+import { ObsidianTasksRepo, taskUpdateNeedsWrite } from "./tasksRepo";
 import { ObsidianSecretField } from "./secretField";
 import { createRenderTitle } from "./titleRenderer";
 import { App, debounce, Notice, Pos, requestUrl, TFile } from "obsidian";
@@ -30,6 +30,11 @@ const OBSIDIAN_AI_SYSTEM_PROMPT = `You are operating inside an Obsidian vault wh
 - When creating a task, choose the target category/file path that best matches the note or project the user is talking about. If the destination note is unclear, ask a short clarification instead of guessing.
 - When changing existing tasks, preserve vault-specific metadata and unrelated task fields. Use task IDs returned by query results rather than inventing IDs or relying only on title text.
 - If multiple tasks could match the user's intent, ask the user to choose or narrow the scope before destructive or bulk changes.`;
+
+const describeFailure = (action: string, error: unknown): string =>
+	error instanceof Error
+		? `Failed to ${action}: ${error.message}`
+		: `Failed to ${action}.`;
 
 const handleItemClick = (item: Task, app: App) => {
 	if (!item.extra?.file) {
@@ -204,7 +209,8 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 		};
 	}, [plugin]);
 
-	// Task CRUD handlers
+	// Task CRUD handlers. Each rethrows after notifying so its caller (the
+	// timeline UI or an AI tool) reports the failure instead of success.
 	const handleTaskAdded = async (task: Task): Promise<Task> => {
 		try {
 			const stored = await stableTasksRepo.current.addTask(task);
@@ -217,37 +223,23 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			return stored;
 		} catch (error) {
 			console.error("Failed to add task:", error);
-			new Notice(
-				error instanceof Error
-					? `Failed to add task: ${error.message}`
-					: "Failed to add task.",
-			);
-			// Rethrow so the AI create_task tool reports the failure.
+			new Notice(describeFailure("add task", error));
 			throw error;
 		}
 	};
 
 	const handleTaskUpdated = async (task: Task, previous: Task) => {
-		// Skip update if nothing actually changed
-		if (
-			task.title === previous.title &&
-			task.status === previous.status &&
-			task.priority === previous.priority &&
-			task.dueAt === previous.dueAt &&
-			task.completedAt === previous.completedAt &&
-			task.startAt === previous.startAt &&
-			task.createdAt === previous.createdAt
-		) {
-			return;
-		}
-
 		try {
+			if (!taskUpdateNeedsWrite(task, previous)) {
+				return;
+			}
 			await stableTasksRepo.current.updateTask(task);
 			// Update local state only after successful save
 			setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
 		} catch (error) {
 			console.error("Failed to update task:", error);
-			new Notice("Failed to update task. Changes not saved.");
+			new Notice(describeFailure("update task", error));
+			throw error;
 		}
 	};
 
@@ -258,7 +250,8 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			setTasks((prev) => prev.filter((t) => t.id !== taskId));
 		} catch (error) {
 			console.error("Failed to delete task:", error);
-			new Notice("Failed to delete task.");
+			new Notice(describeFailure("delete task", error));
+			throw error;
 		}
 	};
 

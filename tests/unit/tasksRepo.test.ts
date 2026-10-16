@@ -1,6 +1,9 @@
-import type { Task } from "@tasks-timeline/components";
+import { taskToMarkdown, type Task } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "../../src/main";
-import { ObsidianTasksRepo } from "../../src/tasksRepo";
+import {
+	ObsidianTasksRepo,
+	taskUpdateNeedsWrite,
+} from "../../src/tasksRepo";
 import { App, TFile } from "../mocks/obsidian";
 import { indexFile, reindexAfterWrites } from "../helpers/testHelpers";
 
@@ -159,5 +162,101 @@ describe("ObsidianTasksRepo.addTask", () => {
 			"Cannot add task: target note not found: Missing.md",
 		);
 		expect(app.vault.getAbstractFileByPath("Missing.md")).toBeNull();
+	});
+});
+
+describe("taskUpdateNeedsWrite", () => {
+	async function loadOnlyTask(line: string): Promise<Task> {
+		const { repo } = createRepo(`${line}\n`);
+		const [task] = await repo.loadTasks();
+		if (!task) {
+			throw new Error(`No task parsed from: ${line}`);
+		}
+		return task;
+	}
+
+	it("skips an edit that changes nothing", async () => {
+		const previous = await loadOnlyTask("- [ ] Pay rent #home 📅 2026-11-01");
+
+		expect(taskUpdateNeedsWrite({ ...previous }, previous)).toBe(false);
+	});
+
+	it("skips a no-op edit without reformatting the line", async () => {
+		const line = "- [ ] #home Pay rent";
+		const previous = await loadOnlyTask(line);
+		// Serializing would move the leading tag to the end of the line.
+		expect(taskToMarkdown(previous, line)).not.toBe(line);
+
+		expect(taskUpdateNeedsWrite({ ...previous }, previous)).toBe(false);
+	});
+
+	it("treats an empty description as no description", async () => {
+		const previous = await loadOnlyTask("- [ ] Pay rent");
+
+		expect(
+			taskUpdateNeedsWrite({ ...previous, description: "" }, previous),
+		).toBe(false);
+	});
+
+	it("writes a tag removal", async () => {
+		const previous = await loadOnlyTask("- [ ] Pay rent #home");
+
+		expect(taskUpdateNeedsWrite({ ...previous, tags: [] }, previous)).toBe(
+			true,
+		);
+	});
+
+	it("writes a recurrence-only change", async () => {
+		const previous = await loadOnlyTask("- [ ] Water plants 📅 2026-11-01");
+
+		expect(
+			taskUpdateNeedsWrite(
+				{ ...previous, recurringInterval: "every week" },
+				previous,
+			),
+		).toBe(true);
+	});
+
+	it("writes a scheduled-date-only change", async () => {
+		const previous = await loadOnlyTask("- [ ] Water plants");
+
+		expect(
+			taskUpdateNeedsWrite(
+				{
+					...previous,
+					extra: { ...previous.extra, scheduledAt: "2026-11-02" },
+				},
+				previous,
+			),
+		).toBe(true);
+	});
+
+	it("writes when the stored line is unknown", async () => {
+		const previous = await loadOnlyTask("- [ ] Water plants");
+		const withoutLine = { ...previous, extra: undefined };
+
+		expect(taskUpdateNeedsWrite({ ...withoutLine }, withoutLine)).toBe(true);
+	});
+
+	it("rejects a description-only change the line cannot store", async () => {
+		const previous = await loadOnlyTask("- [ ] Pay rent");
+
+		expect(() =>
+			taskUpdateNeedsWrite(
+				{ ...previous, description: "Bank transfer" },
+				previous,
+			),
+		).toThrow(/description cannot be stored in the vault line/);
+	});
+
+	it("rejects a category-only change the line cannot store", async () => {
+		const previous = await loadOnlyTask("- [ ] Pay rent");
+
+		expect(() =>
+			taskUpdateNeedsWrite(
+				{ ...previous, category: "Other.md" },
+				previous,
+			),
+		).toThrow(/category cannot be stored in the vault line/);
 	});
 });

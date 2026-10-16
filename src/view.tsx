@@ -26,7 +26,13 @@ interface ErrorBoundaryState {
 	error: Error | null;
 }
 
-class TimelineErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+/**
+ * Shows a visible error with a "Try Again" button instead of a blank pane.
+ * Shared by the view and the settings tab. "Try Again" remounts the children,
+ * so they must read current state on mount rather than values captured
+ * when the element was created.
+ */
+export class TimelineErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 	constructor(props: ErrorBoundaryProps) {
 		super(props);
 		this.state = { hasError: false, error: null };
@@ -86,13 +92,7 @@ export class TasksTimelineObsidianView extends ItemView {
 	}
 
 	protected async onOpen() {
-		const { containerEl } = this;
-		const container = containerEl.children[1];
-		if (!container) {
-			console.error("Tasks Timeline: Container element not found");
-			return;
-		}
-		const host = container as HTMLElement;
+		const host = this.contentEl;
 		host.empty();
 		host.addClass("tasks-timeline-view-host");
 
@@ -116,7 +116,6 @@ export class TasksTimelineObsidianView extends ItemView {
 
 	protected async onClose() {
 		this.root = unmountReactRoot(this.root);
-		const container = this.containerEl.children[1] as HTMLElement | undefined;
-		container?.shadowRoot?.replaceChildren();
+		this.contentEl.shadowRoot?.replaceChildren();
 	}
 }

@@ -79,6 +79,17 @@ export type TAbstractFile = TFile | TFolder;
 export class Vault {
 	private files = new Map<string, TFile>();
 	private fileContents = new Map<string, string>();
+	private listeners: EventRef[] = [];
+
+	on(name: string, callback: (...args: unknown[]) => void): EventRef {
+		const ref = { name, callback };
+		this.listeners = [...this.listeners, ref];
+		return ref;
+	}
+
+	offref(ref: EventRef): void {
+		this.listeners = this.listeners.filter((l) => l !== ref);
+	}
 
 	// Mock method to add files for testing
 	_addFile(path: string, content: string) {
@@ -177,6 +188,31 @@ export class Notice {
 		// eslint-disable-next-line no-console
 		console.log(`[Notice] ${message}`);
 	}
+}
+
+export interface Debouncer<T extends unknown[]> {
+	(...args: T): void;
+	cancel(): Debouncer<T>;
+}
+
+export function debounce<T extends unknown[]>(
+	cb: (...args: T) => unknown,
+	timeout = 0,
+): Debouncer<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const debounced = ((...args: T) => {
+		clearTimeout(timer);
+		timer = setTimeout(() => cb(...args), timeout);
+	}) as Debouncer<T>;
+	debounced.cancel = () => {
+		clearTimeout(timer);
+		return debounced;
+	};
+	return debounced;
+}
+
+export async function requestUrl(): Promise<never> {
+	throw new Error("requestUrl is not available in tests");
 }
 
 export class Plugin {
@@ -311,11 +347,16 @@ export class ItemView {
 	app: App;
 	leaf: WorkspaceLeaf;
 	containerEl: HTMLElement;
+	contentEl: HTMLElement;
 
 	constructor(leaf: WorkspaceLeaf) {
 		this.app = new App();
 		this.leaf = leaf;
+		// Same layout as Obsidian: a header, then the content element.
 		this.containerEl = document.createElement('div');
+		this.containerEl.appendChild(document.createElement('div'));
+		this.contentEl = document.createElement('div');
+		this.containerEl.appendChild(this.contentEl);
 	}
 
 	getViewType(): string {

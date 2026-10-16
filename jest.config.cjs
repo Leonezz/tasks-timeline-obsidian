@@ -9,15 +9,17 @@ module.exports = {
 	transform: {
 		'^.+\\.(ts|tsx)$': ['ts-jest', {
 			tsconfig: {
-				jsx: 'react',
+				// Match the app build: src .tsx files rely on the automatic runtime.
+				jsx: 'react-jsx',
 				esModuleInterop: true,
 				allowSyntheticDefaultImports: true,
 			}
 		}]
 	},
 	moduleNameMapper: {
-		'obsidian': '<rootDir>/tests/mocks/obsidian.ts',
-		'\\.css$': '<rootDir>/tests/mocks/styleMock.ts',
+		// Anchored so ./obsidianAdapter and ./obsidianDom resolve to their sources.
+		'^obsidian$': '<rootDir>/tests/mocks/obsidian.ts',
+		'\\.css(\\?inline)?$': '<rootDir>/tests/mocks/styleMock.ts',
 	},
 	setupFiles: ['<rootDir>/tests/polyfills.ts'],
 	setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],

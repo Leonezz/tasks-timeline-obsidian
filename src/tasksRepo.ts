@@ -29,6 +29,44 @@ import {
 /** How long addTask waits for Obsidian to index the line it appended. */
 const ADDED_TASK_INDEX_TIMEOUT_MS = 5000;
 
+/**
+ * Task fields that `updateTask` cannot persist: it only rewrites the task's
+ * own line, which holds neither a description nor the note it lives in.
+ */
+const LINE_UNSTORABLE_FIELDS = ["description", "category"] as const;
+
+/**
+ * Decides whether an edit of a vault task needs a write.
+ *
+ * Both versions are serialized onto the stored line, so only changes the line
+ * can hold count, and a no-op edit (e.g. leaving inline edit mode) neither
+ * rewrites nor reformats the line.
+ *
+ * @returns false when nothing changed; true when the serialized line changes,
+ * or when the stored line is unknown (`updateTask` then locates it itself).
+ * @throws when the only changes are to fields the vault line cannot store.
+ */
+export function taskUpdateNeedsWrite(task: Task, previous: Task): boolean {
+	const rawText = previous.extra?.rawText;
+	if (!rawText) {
+		return true;
+	}
+	if (taskToMarkdown(task, rawText) !== taskToMarkdown(previous, rawText)) {
+		return true;
+	}
+
+	const unstorable = LINE_UNSTORABLE_FIELDS.filter(
+		(field) => (task[field] ?? "").trim() !== (previous[field] ?? "").trim(),
+	);
+	if (unstorable.length > 0) {
+		throw new Error(
+			`Cannot update task: ${unstorable.join(" and ")} cannot be stored in the vault line. Only the task line (title, status, priority, dates, tags, recurrence) is saved.`,
+		);
+	}
+	return false;
+}
+
+
 export class ObsidianTasksRepo implements TaskRepository {
 	name: string = "Obsidian Notes";
 	plugin: TasksTimelineObsidianPlugin;
