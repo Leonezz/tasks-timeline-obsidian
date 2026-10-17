@@ -61,6 +61,10 @@ Target plugin state:
   interface in `@tasks-timeline/components`.
 - Prefer one provider-neutral HTTP path from the Obsidian host, using Obsidian
   `requestUrl` and an OpenAI-compatible endpoint or gateway where possible.
+  Since `@tasks-timeline/components` 0.9.0 the plugin passes `aiFetch`
+  (`obsidianFetch` in `src/obsidianHttp.ts`, built on `requestUrl`) to the
+  timeline and to the settings tab, so the built-in providers already send
+  their requests through it.
 - Keep provider-specific adapters optional. The plugin should not bundle every
   provider SDK unless that adapter is enabled or explicitly installed.
 - Let both internal AI and MCP call the same task capability contract.

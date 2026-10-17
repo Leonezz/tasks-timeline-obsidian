@@ -1,14 +1,26 @@
 import { render, waitFor } from "@testing-library/react";
-import type { Task } from "@tasks-timeline/components";
+import type { Task, VoiceRuntime } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "../../src/main";
 import { ObsidianAdaptor } from "../../src/obsidianAdapter";
+import { obsidianFetch } from "../../src/obsidianHttp";
 import * as obsidian from "../mocks/obsidian";
-import { editExternally, indexFile } from "../helpers/testHelpers";
+import { DateTime } from "luxon";
+import {
+	editExternally,
+	indexFile,
+	indexFileWithSplitRules,
+} from "../helpers/testHelpers";
+import { RESAVED_SPLIT_RULES, RULE_LINE } from "../fixtures/v080SplitRules";
 
 interface CapturedAppProps {
 	tasks: Task[];
+	onTaskAdded: (task: Task) => Promise<Task>;
 	onTaskUpdated: (task: Task, previous: Task) => Promise<void>;
 	onTaskDeleted: (taskId: string, previous: Task) => Promise<void>;
+	recurrenceFormat?: string;
+	voiceRuntime?: VoiceRuntime;
+	aiFetch?: typeof fetch;
+	aiProviderFactory?: unknown;
 }
 
 let mockAppProps: CapturedAppProps | undefined;
@@ -26,10 +38,10 @@ jest.mock("../../src/obsidianDom", () => ({
 	getActiveDocument: () => document,
 }));
 
-async function renderAdaptor(content: string) {
+async function renderAdaptor(content: string, index = indexFile) {
 	const app = new obsidian.App();
 	app.vault._addFile("Tasks.md", content);
-	indexFile(app, "Tasks.md", content);
+	index(app, "Tasks.md", content);
 	const file = app.vault.getAbstractFileByPath("Tasks.md");
 	if (!(file instanceof obsidian.TFile)) {
 		throw new Error("Test file not created");
@@ -64,6 +76,21 @@ describe("ObsidianAdaptor task handlers", () => {
 
 	afterEach(() => {
 		noticeSpy.mockRestore();
+	});
+
+	it("has the editor and agent write recurrence as Obsidian Tasks text", async () => {
+		const { props } = await renderAdaptor("- [ ] Pay rent\n");
+
+		expect(props.recurrenceFormat).toBe("text");
+	});
+
+	it("sends AI requests through requestUrl and declares browser speech unsupported", async () => {
+		const { props } = await renderAdaptor("- [ ] Pay rent\n");
+
+		expect(props.aiFetch).toBe(obsidianFetch);
+		// aiFetch and aiProviderFactory can't be combined.
+		expect(props.aiProviderFactory).toBeUndefined();
+		expect(props.voiceRuntime?.browserSpeechSupported).toBe(false);
 	});
 
 	it("rejects and shows the reason when the vault write fails", async () => {
@@ -179,33 +206,40 @@ describe("ObsidianAdaptor task handlers", () => {
 		});
 	});
 
-	describe("with a recurring task (components <= v0.8.0 edit modal)", () => {
+	it("keeps Dataview fields when a task is toggled in the timeline", async () => {
+		const { app, file, previous } = await renderAdaptor(
+			"- [ ] Task [[project:: Alpha]] [[due:: 2026-10-25]]\n",
+		);
+
+		await mockAppProps!.onTaskUpdated(
+			{ ...previous, status: "done", completedAt: "2026-10-17" },
+			previous,
+		);
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [x] Task [[project:: Alpha]] [[due:: 2026-10-25]] ✅ 2026-10-17\n",
+		);
+	});
+
+	describe("with a recurring task", () => {
 		const RECURRING = "- [ ] Water plants 📅 2026-10-16 🔁 every day\n";
 
-		// What v0.8.0's modal saves when its recurrence switch is untouched.
-		const savedByModal = (task: Task, changes: Partial<Task> = {}) => ({
-			...task,
-			...changes,
-			recurringInterval: undefined,
-		});
-
-		it("keeps 🔁 on a modal save that changes nothing", async () => {
+		it("leaves the line alone on an editor save that changes nothing", async () => {
 			const { app, file, previous } = await renderAdaptor(RECURRING);
 			const processSpy = jest.spyOn(app.vault, "process");
 
-			await mockAppProps!.onTaskUpdated(savedByModal(previous), previous);
+			// The editor returns the stored rule as it read it.
+			await mockAppProps!.onTaskUpdated({ ...previous }, previous);
 
 			expect(processSpy).not.toHaveBeenCalled();
 			await expect(app.vault.cachedRead(file)).resolves.toBe(RECURRING);
 		});
 
-		it("keeps 🔁 on a modal save that only changes tags", async () => {
+		it("keeps 🔁 on a save that only changes tags", async () => {
 			const { app, file, previous } = await renderAdaptor(RECURRING);
 
 			await mockAppProps!.onTaskUpdated(
-				savedByModal(previous, {
-					tags: [{ id: "#home", name: "#home" }],
-				}),
+				{ ...previous, tags: [{ id: "#home", name: "#home" }] },
 				previous,
 			);
 
@@ -214,23 +248,23 @@ describe("ObsidianAdaptor task handlers", () => {
 			);
 		});
 
-		it("keeps 🔁 on a modal save that only changes the description", async () => {
+		it("rejects a save that only changes the description", async () => {
 			const { app, file, previous } = await renderAdaptor(RECURRING);
 
 			await expect(
 				mockAppProps!.onTaskUpdated(
-					savedByModal(previous, { description: "Use rain water" }),
+					{ ...previous, description: "Use rain water" },
 					previous,
 				),
 			).rejects.toThrow(/description cannot be stored/);
 			await expect(app.vault.cachedRead(file)).resolves.toBe(RECURRING);
 		});
 
-		it("clears 🔁 when the modal's recurrence switch is turned off", async () => {
+		it("clears 🔁 when the editor's recurrence switch is turned off", async () => {
 			const { app, file, previous } = await renderAdaptor(RECURRING);
 
 			await mockAppProps!.onTaskUpdated(
-				savedByModal(previous, { isRecurring: false }),
+				{ ...previous, isRecurring: false, recurringInterval: undefined },
 				previous,
 			);
 
@@ -242,7 +276,7 @@ describe("ObsidianAdaptor task handlers", () => {
 		it("clears 🔁 when the in-app AI clears the recurrence", async () => {
 			const { app, file, previous } = await renderAdaptor(RECURRING);
 
-			// v0.8.0 update_task with recurrence "".
+			// update_task with recurrence "".
 			await mockAppProps!.onTaskUpdated(
 				{ ...previous, isRecurring: undefined, recurringInterval: undefined },
 				previous,
@@ -251,6 +285,115 @@ describe("ObsidianAdaptor task handlers", () => {
 			await expect(app.vault.cachedRead(file)).resolves.toBe(
 				"- [ ] Water plants 📅 2026-10-16\n",
 			);
+		});
+	});
+
+	describe("with a line break in the title", () => {
+		const TITLES: [string, string][] = [
+			["a line break", "Buy groceries:\n- [ ] milk"],
+			["a line separator (U+2028)", "Buy groceries:\u2028- [ ] milk"],
+			["a paragraph separator (U+2029)", "Buy groceries:\u2029- [ ] milk"],
+		];
+
+		it.each(TITLES)("refuses to add a task whose title has %s", async (_kind, title) => {
+			const { app, file, previous } = await renderAdaptor("- [ ] Pay rent\n");
+			const processSpy = jest.spyOn(app.vault, "process");
+
+			await expect(
+				mockAppProps!.onTaskAdded({
+					...previous,
+					id: "new-task",
+					title,
+					extra: undefined,
+				}),
+			).rejects.toThrow(/the title has a line break/);
+			expect(processSpy).not.toHaveBeenCalled();
+			expect(noticeSpy).toHaveBeenCalledWith(
+				expect.stringMatching(/the title has a line break/),
+			);
+			await expect(app.vault.cachedRead(file)).resolves.toBe("- [ ] Pay rent\n");
+		});
+
+		it.each(TITLES)("refuses to rename a task to a title with %s", async (_kind, title) => {
+			const content = "- [ ] Pay rent 📅 2026-10-16\n";
+			const { app, file, previous } = await renderAdaptor(content);
+
+			await expect(
+				mockAppProps!.onTaskUpdated({ ...previous, title }, previous),
+			).rejects.toThrow(/the title has a line break/);
+			await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+		});
+	});
+
+	describe("with a rule v0.8.0 split over two lines", () => {
+		const START = DateTime.fromISO("2026-10-16")
+			.toUTC()
+			.toFormat("yyyyMMdd'T'HHmmss'Z'");
+		const SPLIT = `- [ ] Report 📅 2026-10-16 🔁 DTSTART:${START}\nRRULE:FREQ=WEEKLY;INTERVAL=1\n`;
+
+		it("shows the joined rule and leaves the note alone on a no-op save", async () => {
+			const { app, file, previous } = await renderAdaptor(
+				SPLIT,
+				indexFileWithSplitRules,
+			);
+			const processSpy = jest.spyOn(app.vault, "process");
+
+			await mockAppProps!.onTaskUpdated({ ...previous }, previous);
+
+			expect(previous.recurringInterval).toBe("every week on Friday");
+			expect(processSpy).not.toHaveBeenCalled();
+			await expect(app.vault.cachedRead(file)).resolves.toBe(SPLIT);
+		});
+
+		it("repairs the line when the task is toggled", async () => {
+			const { app, file, previous } = await renderAdaptor(
+				SPLIT,
+				indexFileWithSplitRules,
+			);
+
+			await mockAppProps!.onTaskUpdated(
+				{ ...previous, status: "done", completedAt: "2026-10-17" },
+				previous,
+			);
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"- [x] Report 📅 2026-10-16 🔁 every week on Friday ✅ 2026-10-17\n",
+			);
+			expect(noticeSpy).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("with a rule v0.8.0 split and saved again, with a priority in the title", () => {
+		const RESAVED = `${RESAVED_SPLIT_RULES[0]!.line}\n${RULE_LINE}\n`;
+
+		it("shows the priority and leaves the note alone on a no-op save", async () => {
+			const { app, file, previous } = await renderAdaptor(
+				RESAVED,
+				indexFileWithSplitRules,
+			);
+
+			await mockAppProps!.onTaskUpdated({ ...previous }, previous);
+
+			expect(previous).toMatchObject({ title: "Report", priority: "high" });
+			await expect(app.vault.cachedRead(file)).resolves.toBe(RESAVED);
+			expect(noticeSpy).not.toHaveBeenCalled();
+		});
+
+		it("unticks it onto the joined line, keeping the priority", async () => {
+			const { app, file, previous } = await renderAdaptor(
+				RESAVED,
+				indexFileWithSplitRules,
+			);
+
+			await mockAppProps!.onTaskUpdated(
+				{ ...previous, status: "todo", completedAt: undefined },
+				previous,
+			);
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"- [ ] Report ⏫ 📅 2026-10-16 🔁 every week on Friday\n",
+			);
+			expect(noticeSpy).not.toHaveBeenCalled();
 		});
 	});
 
@@ -397,12 +540,8 @@ describe("ObsidianAdaptor task handlers", () => {
 		);
 		const current = mockAppProps!.tasks[0]!;
 
-		// v0.8.0's modal saves the copy with its recurrence switch untouched.
 		await expect(
-			mockAppProps!.onTaskUpdated(
-				{ ...editorCopy, status: "done", recurringInterval: undefined },
-				current,
-			),
+			mockAppProps!.onTaskUpdated({ ...editorCopy, status: "done" }, current),
 		).rejects.toThrow("changed since it was read");
 		expect(noticeSpy).toHaveBeenCalledWith(
 			"Failed to update task: this note changed in the editor; the timeline is refreshing — reopen the task and try again.",

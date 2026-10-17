@@ -90,12 +90,16 @@ Tasks can have priority indicated by emoji symbols:
 | Emoji | Priority |
 |-------|----------|
 | 🔺 or ⏫ | high |
-| 🔼 | medium |
+| 🔼 or none | medium |
 | 🔽 or ⏬ | low |
 
-## Date Symbols
+High is written as ⏫ and low as 🔽; medium is not written.
 
-Dates are embedded in task lines using emoji prefixes:
+## Fields
+
+A task is one line, so a title can't have a line break: such a title is rejected before anything is written. Put details in \`description\`.
+
+Fields are emoji followed by a value, written after the task's title:
 
 | Emoji | Field | Meaning |
 |-------|-------|---------|
@@ -103,10 +107,28 @@ Dates are embedded in task lines using emoji prefixes:
 | 📅 | dueAt | Deadline |
 | ⏳ | scheduledAt (extra) | Scheduled date |
 | ✅ | completedAt | When completed |
+| ❌ | cancelledAt | When cancelled |
 | ➕ | createdAt | When created |
-| 🔁 | recurringInterval | Recurrence rule |
+| 🔁 | recurringInterval | Recurrence rule (see below) |
+| 🏁 | onCompletion | What Obsidian Tasks does with the task when it is completed: \`keep\` or \`delete\` |
+| 🆔 | taskId | The task's Obsidian Tasks id, which ⛔ refers to. The taskId is not the \`id\` the tools take |
+| ⛔ | dependsOn | The taskIds of the tasks this one waits for |
 
 **Date format**: Display format is \`${dateFormat}\`. Dates are stored as \`YYYY-MM-DD\`.
+
+A completed task keeps its ✅ date and a cancelled one its ❌ date; setting a task back to todo removes them.
+
+## Recurrence
+
+Rules are stored as Obsidian Tasks text: \`every week on Monday\`, \`every 2 weeks\`, \`every month on the 15th until December 31, 2026\`, \`every week when done\`. RRULE syntax given to the tools is stored as text. Rules a task line can't hold are rejected before anything is written: rules with a start date (DTSTART; set the task's \`startAt\` instead), BYSETPOS, and counts (COUNT, "for 3 times"; use an end date such as UNTIL=20261231 or "until December 31, 2026").
+
+A 🔁 that runs straight into other text is not a rule but part of the title, as in Obsidian Tasks: in \`Standup 🔁 every day at 9:30\` the title is the whole text and the task does not recur.
+
+## Notes After the Fields
+
+Text and links after a task's fields (\`Review draft 📅 2026-10-16 see [[Draft notes]]\`) are not part of the title: they are in \`extra.lineNotes\` and stay where they are on the line. \`query_tasks\` text search only looks at the title and description, so it does not find words that are only in the notes.
+
+Reminders stay on the line and are not part of the title either: ⏰ reminders (\`⏰ 2026-10-16 09:00\`) and obsidian-reminder reminders (\`(@2026-10-16 09:00)\`). The next occurrence of a recurring task does not get them.
 
 ## Category = File Path
 
@@ -126,11 +148,15 @@ Tags can appear:
 
 ## Dataview Inline Fields
 
-Tasks can contain Dataview-style inline fields in the format \`[key:: value]\`. These are parsed and stored in \`task.extra\`.
+Tasks can contain Dataview inline fields in the format \`[[key:: value]]\`, in the title or after the fields. Dates in \`due\`, \`scheduled\`, \`start\`, \`created\` and \`completion\` (or \`done\`) fields are read into the task's dates, and other dated fields into \`task.extra\`. The fields stay on the line: changing such a date rewrites its Dataview field, and clearing the date removes it.
 
 ## Daily Notes
 
 Files whose name matches a date pattern are treated as daily notes. Tasks from daily notes have \`task.extra.isDailyNote === "true"\`.
+
+## Task IDs
+
+Task ids look like \`Projects/WebApp.md:12:0~<version>\`: the note, the task's line and column, and a version of the line the id was issued for. Once the line changes (in Obsidian or by another client), its id is refused with "changed since it was read"; query the tasks again for the current id. Ids from this server's own changes stay valid.
 
 ## Available MCP Tools
 
@@ -153,10 +179,10 @@ Files whose name matches a date pattern are treated as daily notes. Tasks from d
 - Use vault context when matching tasks. A task's note file path can be as important as its title, especially when several tasks have similar wording.
 - Always use \`query_tasks\` with filters rather than fetching all tasks and filtering client-side
 - When creating tasks, set \`category\` to the target file path; omit it to use the default (\`${defaultCategory}\`)
-- Task IDs are internal identifiers — use \`query_tasks\` to discover them
+- Task IDs are internal identifiers — use \`query_tasks\` to discover them. They are not the 🆔 \`taskId\`
 - For updates, completions, cancellations, or deletes, resolve task IDs from query results and preserve unrelated task fields
 - If the relevant note, project, task identity, or destructive scope is ambiguous, ask a concise clarification before changing the vault
-- The \`extra\` field contains vault-specific metadata like \`isDailyNote\`, \`scheduledAt\`, \`marker\`, etc.`;
+- The \`extra\` field contains vault-specific metadata like \`isDailyNote\`, \`scheduledAt\`, \`lineNotes\`, \`marker\`, etc.`;
 
 			return [{ role: "user", content }];
 		},
