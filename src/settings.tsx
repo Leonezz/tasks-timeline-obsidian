@@ -631,9 +631,9 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 		host?.shadowRoot?.replaceChildren();
 	}
 
-	private persistAppSettings(settings: AppSettings): void {
-		this.plugin.settings.appSetting = settings;
-		this.plugin.saveSettings().then(
+	/** Saves settings, reporting a failure once per failure streak. */
+	private saveSettingsReporting(): Promise<void> {
+		return this.plugin.saveSettings().then(
 			() => {
 				this.settingsSaveFailing = false;
 			},
@@ -650,6 +650,24 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 				);
 			},
 		);
+	}
+
+	private async restartMcpServerReporting(): Promise<void> {
+		try {
+			await this.plugin.restartMcpServer();
+		} catch (error) {
+			console.error("Failed to restart the agent server:", error);
+			new Notice(
+				error instanceof Error
+					? `Failed to restart the agent server: ${error.message}`
+					: "Failed to restart the agent server.",
+			);
+		}
+	}
+
+	private persistAppSettings(settings: AppSettings): void {
+		this.plugin.settings.appSetting = settings;
+		void this.saveSettingsReporting();
 		this.plugin.bus.emit("settings:changed", {});
 	}
 
@@ -708,33 +726,37 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 						this.plugin.settings.mcpServer.subscriptionsEnabled ??
 						false
 					}
+					// These run with `void` in the tab, so each one reports its
+					// own failures, and applies its change even if saving fails.
 					onToggle={async (value) => {
 						this.plugin.settings.mcpServer.enabled = value;
-						await this.plugin.saveSettings();
-						await this.plugin.restartMcpServer();
+						await this.saveSettingsReporting();
+						await this.restartMcpServerReporting();
 					}}
 					onHostChange={async (host) => {
 						this.plugin.settings.mcpServer.host = host;
-						await this.plugin.saveSettings();
+						await this.saveSettingsReporting();
 					}}
 					onPortChange={async (port) => {
 						this.plugin.settings.mcpServer.port = port;
-						await this.plugin.saveSettings();
+						await this.saveSettingsReporting();
 					}}
 					onAuthToggle={async (value) => {
 						this.plugin.settings.mcpServer.authEnabled = value;
-						await this.plugin.saveSettings();
+						await this.saveSettingsReporting();
 					}}
 					onBlacklistChange={async (value) => {
 						this.plugin.settings.mcpServer.blacklist = value;
-						await this.plugin.saveSettings();
+						// Block on the running server first: a failed save must
+						// not leave it serving what the user just blocked.
 						this.plugin.updateSecurityBlacklist(value);
+						await this.saveSettingsReporting();
 					}}
 					onSubscriptionsToggle={async (value) => {
 						this.plugin.settings.mcpServer.subscriptionsEnabled =
 							value;
-						await this.plugin.saveSettings();
-						await this.plugin.restartMcpServer();
+						await this.saveSettingsReporting();
+						await this.restartMcpServerReporting();
 					}}
 					getAuthToken={() => this.plugin.getAuthToken()}
 					regenerateToken={() => this.plugin.regenerateAuthToken()}

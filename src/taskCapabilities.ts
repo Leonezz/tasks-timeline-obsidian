@@ -6,7 +6,7 @@ import type {
 import type TasksTimelineObsidianPlugin from "./main";
 import { SecurityManager } from "./mcpSecurity";
 import { StaleTaskError, taskLineVersion } from "./taskLine";
-import { ObsidianTasksRepo } from "./tasksRepo";
+import { ObsidianTasksRepo, taskUpdateNeedsWrite } from "./tasksRepo";
 
 function getTaskTargetPath(
 	plugin: TasksTimelineObsidianPlugin,
@@ -170,6 +170,11 @@ export function createObsidianCapabilityContext(
 			assertAllowedPath(securityManager, targetPath, "update task");
 			assertAllowedTask(securityManager, repoTask, "update task");
 
+			// Throws for changes the line cannot store (description, category,
+			// frontmatter tags) instead of reporting success for a no-op.
+			if (!taskUpdateNeedsWrite(repoTask, existingTask)) {
+				return;
+			}
 			const written = taskLineVersion(
 				await tasksRepo.writeTaskLine(repoTask),
 			);

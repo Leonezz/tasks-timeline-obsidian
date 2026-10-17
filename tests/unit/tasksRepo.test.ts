@@ -250,6 +250,36 @@ describe("taskUpdateNeedsWrite", () => {
 		).toThrow(/description cannot be stored in the vault line/);
 	});
 
+	it("rejects a line change mixed with a description it cannot store", async () => {
+		const previous = await loadOnlyTask("- [ ] Pay rent");
+
+		expect(() =>
+			taskUpdateNeedsWrite(
+				{ ...previous, title: "Pay the rent", description: "Bank transfer" },
+				previous,
+			),
+		).toThrow(/description cannot be stored in the vault line/);
+	});
+
+	it("rejects removing a tag the note's frontmatter gives the task", async () => {
+		const loaded = await loadOnlyTask("- [ ] Pay rent");
+		const previous: Task = {
+			...loaded,
+			tags: [{ id: "#home", name: "#home" }],
+			extra: { ...loaded.extra, frontmatterTags: JSON.stringify(["#home"]) },
+		};
+
+		expect(() => taskUpdateNeedsWrite({ ...previous, tags: [] }, previous)).toThrow(
+			/frontmatter tag #home cannot be stored in the vault line/,
+		);
+		expect(() =>
+			taskUpdateNeedsWrite(
+				{ ...previous, title: "Pay the rent", tags: [] },
+				previous,
+			),
+		).toThrow(/frontmatter tag #home/);
+	});
+
 	it("rejects a category-only change the line cannot store", async () => {
 		const previous = await loadOnlyTask("- [ ] Pay rent");
 

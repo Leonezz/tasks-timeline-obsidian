@@ -488,3 +488,26 @@ describe("createObsidianCapabilityContext keeps ids bound to what was read (MCP)
 		);
 	});
 });
+
+describe("createObsidianCapabilityContext with changes the line cannot store (MCP)", () => {
+	it.each([
+		["a description", { description: "Bank transfer" }, /description cannot be stored/],
+		["a category", { category: "Other.md" }, /category cannot be stored/],
+		[
+			"a rename with a description",
+			{ title: "Pay the rent", description: "Bank transfer" },
+			/description cannot be stored/,
+		],
+	] as const)("refuses update_task with %s", async (_change, args, message) => {
+		const content = "- [ ] Pay rent\n";
+		const { app, file, capabilities } = createMcpCapabilities(content);
+
+		const { result } = await capabilities.executeTool("update_task", {
+			id: await listedId(capabilities, "Pay rent"),
+			...args,
+		});
+
+		expect(result).toMatchObject({ error: expect.stringMatching(message) });
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+});
