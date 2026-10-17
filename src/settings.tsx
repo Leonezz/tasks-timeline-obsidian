@@ -200,7 +200,7 @@ function ToggleSwitch({
 			onClick={onToggle}
 			className={cn(
 				"relative w-10 h-6 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400",
-				enabled ? "bg-blue-500" : "bg-slate-200 dark:bg-slate-700",
+				enabled ? "bg-blue-500" : "bg-slate-200",
 			)}
 		>
 			<span
@@ -387,7 +387,7 @@ function McpServerSettings({
 						/>
 					</div>
 
-					<div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-4">
+					<div className="pt-2 border-t border-slate-100 space-y-4">
 						<div>
 							<label
 								htmlFor={hostSelectId}
@@ -471,7 +471,7 @@ function McpServerSettings({
 					</div>
 
 					{authEnabled && (
-						<div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+						<div className="pt-2 border-t border-slate-100">
 							<label
 								htmlFor={tokenInputId}
 								className="text-xs font-medium text-slate-500 block mb-2"
@@ -489,14 +489,14 @@ function McpServerSettings({
 								<button
 									type="button"
 									onClick={() => void handleCopyToken()}
-									className="px-3 py-2 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+									className="px-3 py-2 text-xs bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
 								>
 									{tokenCopied ? "Copied" : "Copy"}
 								</button>
 								<button
 									type="button"
 									onClick={() => void handleRegenerateToken()}
-									className="px-3 py-2 text-xs bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+									className="px-3 py-2 text-xs bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors"
 								>
 									Regenerate
 								</button>
@@ -571,9 +571,9 @@ function McpServerSettings({
 						{statEntries.map(([tool, s]) => (
 							<div
 								key={tool}
-								className="flex items-center justify-between text-xs px-2 py-1 rounded bg-slate-50 dark:bg-slate-800"
+								className="flex items-center justify-between text-xs px-2 py-1 rounded bg-slate-50"
 							>
-								<span className="font-mono text-slate-600 dark:text-slate-300">
+								<span className="font-mono text-slate-600">
 									{tool}
 								</span>
 								<span className="text-slate-400">
@@ -596,10 +596,10 @@ function McpServerSettings({
 						{sessions.map((s) => (
 							<div
 								key={s.sessionId}
-								className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800 text-xs space-y-1"
+								className="p-3 rounded-lg bg-slate-50 text-xs space-y-1"
 							>
 								<div className="flex justify-between">
-									<span className="font-mono text-slate-600 dark:text-slate-300">
+									<span className="font-mono text-slate-600">
 										...{s.sessionId}
 									</span>
 									<span className="text-slate-400">

@@ -19,9 +19,14 @@
 	gap: 0.25rem;
 }
 
+/*
+ * Colors come from the library's theme tokens, which each theme sets on
+ * .tasks-timeline-app, so every theme, light or dark, gets its own colors
+ * and secondary text meets AA contrast.
+ */
 .tasks-timeline-secret-select__label {
 	margin: 0;
-	color: rgb(100 116 139);
+	color: hsl(var(--muted-foreground));
 	font-size: 0.625rem;
 	font-weight: 800;
 	letter-spacing: 0.08em;
@@ -34,10 +39,10 @@
 	min-width: 0;
 	height: 2.375rem;
 	padding: 0 0.75rem;
-	border: 1px solid rgb(226 232 240);
+	border: 1px solid hsl(var(--input));
 	border-radius: 0.5rem;
-	background: rgb(248 250 252);
-	color: rgb(51 65 85);
+	background: hsl(var(--muted));
+	color: hsl(var(--foreground));
 	font-size: 0.8125rem;
 	font-weight: 600;
 	line-height: 1.2;
@@ -50,48 +55,26 @@
 }
 
 .tasks-timeline-secret-select__control:focus {
-	border-color: rgb(59 130 246);
-	background: rgb(255 255 255);
-	box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.28);
+	border-color: hsl(var(--ring));
+	background: hsl(var(--background));
+	box-shadow: 0 0 0 3px hsl(var(--ring) / 0.25);
 }
 
 .tasks-timeline-secret-select__hint,
 .tasks-timeline-secret-select__description {
 	margin: 0;
-	color: rgb(148 163 184);
+	color: hsl(var(--muted-foreground));
 	font-size: 0.625rem;
 	line-height: 1.4;
 }
 
-.tasks-timeline-app[data-theme="dark"] .tasks-timeline-secret-select__label,
-.tasks-timeline-app[data-theme="midnight"] .tasks-timeline-secret-select__label,
-.tasks-timeline-app[data-theme="coffee"] .tasks-timeline-secret-select__label {
-	color: rgb(148 163 184);
-}
-
-.tasks-timeline-app[data-theme="dark"] .tasks-timeline-secret-select__control,
-.tasks-timeline-app[data-theme="midnight"] .tasks-timeline-secret-select__control,
-.tasks-timeline-app[data-theme="coffee"] .tasks-timeline-secret-select__control {
-	border-color: rgb(51 65 85);
-	background: rgb(2 6 23);
-	color: rgb(226 232 240);
-}
-
-.tasks-timeline-app[data-theme="dark"] .tasks-timeline-secret-select__control:focus,
-.tasks-timeline-app[data-theme="midnight"] .tasks-timeline-secret-select__control:focus,
-.tasks-timeline-app[data-theme="coffee"] .tasks-timeline-secret-select__control:focus {
-	border-color: rgb(96 165 250);
-	background: rgb(15 23 42);
-	box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.22);
-}
-
 .tasks-timeline-settings {
-	--tt-settings-border: rgb(226 232 240);
-	--tt-settings-border-strong: rgb(59 130 246);
-	--tt-settings-bg: rgb(255 255 255);
-	--tt-settings-bg-muted: rgb(248 250 252);
-	--tt-settings-text: rgb(51 65 85);
-	--tt-settings-text-muted: rgb(100 116 139);
+	--tt-settings-border: hsl(var(--border));
+	--tt-settings-border-strong: hsl(var(--ring));
+	--tt-settings-bg: hsl(var(--background));
+	--tt-settings-bg-muted: hsl(var(--muted));
+	--tt-settings-text: hsl(var(--foreground));
+	--tt-settings-text-muted: hsl(var(--muted-foreground));
 }
 
 .tasks-timeline-settings :where(.border, .border-2, .border-t, .border-b, .border-l, .border-r, .border-x, .border-y) {
@@ -128,15 +111,4 @@
 
 .tasks-timeline-settings .bg-slate-50 {
 	background-color: var(--tt-settings-bg-muted);
-}
-
-.tasks-timeline-settings[data-theme="dark"],
-.tasks-timeline-settings[data-theme="midnight"],
-.tasks-timeline-settings[data-theme="coffee"] {
-	--tt-settings-border: rgb(51 65 85);
-	--tt-settings-border-strong: rgb(96 165 250);
-	--tt-settings-bg: rgb(15 23 42);
-	--tt-settings-bg-muted: rgb(2 6 23);
-	--tt-settings-text: rgb(226 232 240);
-	--tt-settings-text-muted: rgb(148 163 184);
 }
