@@ -50,6 +50,22 @@ function blockLines(rawText: string): string[] {
 	return [first, ...(nested === -1 ? rest : rest.slice(0, nested))];
 }
 
+/**
+ * A short version of a task's line (FNV-1a over its content), carried in
+ * the ids handed to MCP clients so an id names the line it was issued for.
+ * Formatting the comparison ignores (quote prefix, indentation, trailing
+ * spaces) does not change it.
+ */
+export function taskLineVersion(rawText: string): string {
+	const [line = ""] = rawText.split("\n");
+	let hash = 0x811c9dc5;
+	for (const char of lineContent(line)) {
+		hash ^= char.codePointAt(0) ?? 0;
+		hash = Math.imul(hash, 0x01000193) >>> 0;
+	}
+	return hash.toString(36);
+}
+
 /** Whether two tasks have the same task line (descriptions aside). */
 export function isSameTaskLine(a: string, b: string): boolean {
 	const [lineA = ""] = a.split("\n");
