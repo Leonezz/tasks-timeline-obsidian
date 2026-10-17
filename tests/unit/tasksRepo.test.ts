@@ -150,6 +150,82 @@ describe("ObsidianTasksRepo.addTask", () => {
 		}
 	});
 
+	it.each([
+		[
+			"a due date",
+			"Pay rent 📅 2026-10-20",
+			{},
+			"- [ ] Pay rent 📅 2026-10-20",
+			{ title: "Pay rent", dueAt: "2026-10-20" },
+		],
+		[
+			"a priority",
+			"Fix bug 🔺",
+			{},
+			"- [ ] Fix bug 🔺",
+			{ title: "Fix bug", priority: "high" },
+		],
+		[
+			"a rule and a date",
+			"Water plants 🔁 every week 📆 2026-10-20",
+			{},
+			"- [ ] Water plants 🔁 every week 📆 2026-10-20",
+			{ recurringInterval: "every week", dueAt: "2026-10-20" },
+		],
+		[
+			"a created date (over the timeline's default)",
+			"Pay rent ➕ 2026-10-01",
+			{ createdAt: "2026-10-18T09:00:00.000+08:00" },
+			"- [ ] Pay rent ➕ 2026-10-01",
+			{ createdAt: "2026-10-01" },
+		],
+		[
+			"a due date the task also sets (the task wins)",
+			"Pay rent 📅 2026-10-20",
+			{ dueAt: "2026-10-21" },
+			"- [ ] Pay rent 📅 2026-10-21",
+			{ dueAt: "2026-10-21" },
+		],
+		[
+			"a priority the task also sets (the task wins)",
+			"Fix bug 🔽",
+			{ priority: "high" },
+			"- [ ] Fix bug ⏫",
+			{ priority: "high" },
+		],
+	] as const)(
+		"reads %s typed into the title",
+		async (_kind, title, fields, line, stored) => {
+			const { app, file, repo } = createRepo("- [ ] Existing\n");
+			reindexAfterWrites(app);
+
+			const added = await repo.addTask({ ...baseTask, ...fields, title });
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				`- [ ] Existing\n${line}\n`,
+			);
+			expect(added).toMatchObject(stored);
+		},
+	);
+
+	it("keeps a 🔁 that runs into other text as typed", async () => {
+		const { app, file, repo } = createRepo("- [ ] Existing\n");
+		reindexAfterWrites(app);
+
+		const added = await repo.addTask({
+			...baseTask,
+			title: "Standup 🔁 every day at 9:30",
+		});
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Existing\n- [ ] Standup 🔁 every day at 9:30\n",
+		);
+		expect(added).toMatchObject({
+			title: "Standup 🔁 every day at 9:30",
+			isRecurring: false,
+		});
+	});
+
 	it("rejects when the target note does not exist", async () => {
 		const { app, repo } = createRepo("- [ ] Existing\n");
 

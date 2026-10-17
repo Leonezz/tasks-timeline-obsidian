@@ -112,6 +112,39 @@ export function taskUpdateNeedsWrite(task: Task, previous: Task): boolean {
 	return taskToMarkdown(task, rawText) !== taskToMarkdown(previous, rawText);
 }
 
+/**
+ * A new task with the Obsidian Tasks fields typed into its title
+ * ("Pay rent 📅 2026-10-20", "Fix bug 🔺") read as fields, as a reload reads
+ * them back. Without this, writing the title onto the new line would fail:
+ * the typed field would read back as a field the task doesn't have.
+ *
+ * Fields the task sets win over typed ones, except the defaults the timeline
+ * fills in for every new task: a typed priority wins over "medium", and a
+ * typed ➕ date over the created date.
+ */
+function withTypedFields(task: Task): Task {
+	const typed = parseTasksFormatItem(task);
+	const hasRule = task.recurringInterval !== undefined;
+	return {
+		...task,
+		title: typed.title,
+		priority: task.priority === "medium" ? typed.priority : task.priority,
+		createdAt: typed.createdAt ?? task.createdAt,
+		dueAt: task.dueAt ?? typed.dueAt,
+		startAt: task.startAt ?? typed.startAt,
+		completedAt: task.completedAt ?? typed.completedAt,
+		cancelledAt: task.cancelledAt ?? typed.cancelledAt,
+		isRecurring: hasRule ? task.isRecurring : typed.isRecurring,
+		recurringInterval: hasRule
+			? task.recurringInterval
+			: typed.recurringInterval,
+		onCompletion: task.onCompletion ?? typed.onCompletion,
+		taskId: task.taskId ?? typed.taskId,
+		dependsOn: task.dependsOn ?? typed.dependsOn,
+		extra: { ...typed.extra, ...task.extra },
+	};
+}
+
 export class ObsidianTasksRepo implements TaskRepository {
 	name: string = "Obsidian Notes";
 	plugin: TasksTimelineObsidianPlugin;
@@ -361,9 +394,11 @@ export class ObsidianTasksRepo implements TaskRepository {
 			);
 		}
 
+		// The typed title is the new line's text, so Tasks fields typed into
+		// it ("Pay rent 📅 2026-10-20") stay on the line as typed.
 		const statusMarker = task.status === "done" ? "x" : " ";
 		const templateLine = `- [${statusMarker}] ${task.title}`;
-		const taskLine = taskToMarkdown(task, templateLine);
+		const taskLine = taskToMarkdown(withTypedFields(task), templateLine);
 
 		const descriptionLine = task.description?.trim()
 			? "\t" + task.description.trim().replace(/\n/g, "\n\t")

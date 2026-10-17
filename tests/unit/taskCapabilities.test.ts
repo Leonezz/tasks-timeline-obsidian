@@ -117,6 +117,33 @@ describe("createObsidianCapabilityContext (MCP)", () => {
 	});
 });
 
+describe("createObsidianCapabilityContext create_task with Tasks syntax in the title (MCP)", () => {
+	it("stores the typed fields as written and reports them", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(
+			"- [ ] Existing\n",
+		);
+
+		const { result } = await capabilities.executeTool("create_task", {
+			title: "Pay rent 📅 2026-10-20 🔺",
+		});
+
+		expect(result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toMatch(
+			/^- \[ \] Existing\n- \[ \] Pay rent 📅 2026-10-20 🔺( ➕ \d{4}-\d{2}-\d{2})?\n$/,
+		);
+		const [, created] = (
+			(await capabilities.executeTool("query_tasks", {})).result as {
+				tasks: { title: string; dueAt?: string; priority: string }[];
+			}
+		).tasks;
+		expect(created).toMatchObject({
+			title: "Pay rent",
+			dueAt: "2026-10-20",
+			priority: "high",
+		});
+	});
+});
+
 describe("createObsidianCapabilityContext keeps task data current (MCP)", () => {
 	const DUE = "- [ ] Water plants 🔁 every day 📅 2026-10-16";
 	const DONE = "- [x] Water plants 🔁 every day 📅 2026-10-16 ✅ 2026-10-16";
