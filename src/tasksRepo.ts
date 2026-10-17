@@ -18,6 +18,14 @@ import {
 } from "./parsers";
 import TasksTimelineObsidianPlugin from "./main";
 import { Link } from "./link";
+import { withNotesForNewLine, writeTaskOnLine } from "./lineWriter";
+import {
+	asReadFromRepairedLine,
+	readWithRuleLine,
+	repairSplitRule,
+	splitRuleFix,
+	withJoinedSplitRule,
+} from "./splitRule";
 import {
 	filePathOfTaskId,
 	hasNestedItems,
@@ -81,6 +89,28 @@ function unstorableChanges(task: Task, previous: Task): string[] {
 }
 
 /**
+ * Line breaks a title can't hold: \r and \n, and the line and paragraph
+ * separators (U+2028, U+2029), where the line writer's patterns (".")
+ * also end a line. NEL (U+0085) is not here: neither those patterns nor
+ * Obsidian end a line at it.
+ */
+const LINE_BREAK = /[\r\n\u2028\u2029]/;
+
+/**
+ * Throws for a title with a line break: a task line holds one line, and the
+ * text after the break would become lines of its own (extra tasks, if it
+ * reads "- [ ] …"), or, after U+2028 or U+2029, be written twice on the
+ * line. Details go in the description.
+ */
+function assertSingleLineTitle(task: Task, action: string): void {
+	if (LINE_BREAK.test(task.title)) {
+		throw new Error(
+			`Cannot ${action}: the title has a line break, and a task line can only hold one line. Put the title on one line and the rest in the description.`,
+		);
+	}
+}
+
+/**
  * Decides whether an edit of a vault task needs a write.
  *
  * Both versions are serialized onto the stored line, so only changes the line
@@ -91,9 +121,10 @@ function unstorableChanges(task: Task, previous: Task): string[] {
  * or when the stored line is unknown (`updateTask` then locates it itself).
  * @throws when the edit changes anything the vault line cannot store, even
  * alongside changes it can: saving only part of an edit would drop the rest
- * without a word.
+ * without a word; and for a title with a line break.
  */
 export function taskUpdateNeedsWrite(task: Task, previous: Task): boolean {
+	assertSingleLineTitle(task, "update task");
 	const unstorable = unstorableChanges(task, previous);
 	if (unstorable.length > 0) {
 		const frontmatterHint = unstorable.some((change) =>
@@ -109,31 +140,46 @@ export function taskUpdateNeedsWrite(task: Task, previous: Task): boolean {
 	if (!rawText) {
 		return true;
 	}
-	return taskToMarkdown(task, rawText) !== taskToMarkdown(previous, rawText);
+	// Compared on the line a rule split by v0.8.0 is repaired to, so a no-op
+	// edit leaves such a line alone (writeTaskLine repairs it on a change).
+	// A task read with the rule's second line was read as that line reads.
+	const [line = "", next, ...below] = rawText.split("\n");
+	const repair = repairSplitRule(line, next);
+	const text = repair ? [repair.line, ...below].join("\n") : rawText;
+	return writeTaskOnLine(task, text) !== writeTaskOnLine(previous, text);
 }
 
 /**
- * Compatibility shim for @tasks-timeline/components <= v0.8.0, whose edit
- * modal saves `recurringInterval: undefined` unless its recurrence switch was
- * touched. Tasks read from the vault carry their 🔁 rule in
- * `recurringInterval` but never set `isRecurring`, so every modal save would
- * erase the rule from the note.
+ * A new task with the Obsidian Tasks fields typed into its title
+ * ("Pay rent 📅 2026-10-20", "Fix bug 🔺") read as fields, as a reload reads
+ * them back. Without this, writing the title onto the new line would fail:
+ * the typed field would read back as a field the task doesn't have.
  *
- * Keeps the previous rule when the incoming task has none and no
- * `isRecurring` key at all, which only that untouched switch produces.
- * Explicit removal still clears it: the switch turned off sets
- * `isRecurring: false`, and the AI tools set the `isRecurring` key when they
- * clear a recurrence. Newer modals return the rule unchanged, so this then
- * does nothing.
+ * Fields the task sets win over typed ones, except the defaults the timeline
+ * fills in for every new task: a typed priority wins over "medium", and a
+ * typed ➕ date over the created date.
  */
-export function keepRecurrenceDroppedByModal(task: Task, previous: Task): Task {
-	const dropped =
-		previous.recurringInterval !== undefined &&
-		task.recurringInterval === undefined &&
-		!("isRecurring" in task);
-	return dropped
-		? { ...task, recurringInterval: previous.recurringInterval }
-		: task;
+function withTypedFields(task: Task): Task {
+	const typed = parseTasksFormatItem(task);
+	const hasRule = task.recurringInterval !== undefined;
+	return {
+		...task,
+		title: typed.title,
+		priority: task.priority === "medium" ? typed.priority : task.priority,
+		createdAt: typed.createdAt ?? task.createdAt,
+		dueAt: task.dueAt ?? typed.dueAt,
+		startAt: task.startAt ?? typed.startAt,
+		completedAt: task.completedAt ?? typed.completedAt,
+		cancelledAt: task.cancelledAt ?? typed.cancelledAt,
+		isRecurring: hasRule ? task.isRecurring : typed.isRecurring,
+		recurringInterval: hasRule
+			? task.recurringInterval
+			: typed.recurringInterval,
+		onCompletion: task.onCompletion ?? typed.onCompletion,
+		taskId: task.taskId ?? typed.taskId,
+		dependsOn: task.dependsOn ?? typed.dependsOn,
+		extra: { ...typed.extra, ...task.extra },
+	};
 }
 
 export class ObsidianTasksRepo implements TaskRepository {
@@ -328,6 +374,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 
 		const processedTasks = tasks
 			.map(parseTasksFormatItem)
+			.map(withJoinedSplitRule)
 			.map(parseDataViewFormatItem)
 			.map(dailyNoteTaskParser())
 			.map(remainderParser)
@@ -385,9 +432,16 @@ export class ObsidianTasksRepo implements TaskRepository {
 			);
 		}
 
+		assertSingleLineTitle(task, "add task");
+
+		// The typed title is the new line's text, so Tasks fields typed into
+		// it ("Pay rent 📅 2026-10-20") stay on the line as typed.
 		const statusMarker = task.status === "done" ? "x" : " ";
 		const templateLine = `- [${statusMarker}] ${task.title}`;
-		const taskLine = taskToMarkdown(task, templateLine);
+		const taskLine = taskToMarkdown(
+			withTypedFields(withNotesForNewLine(task)),
+			templateLine,
+		);
 
 		const descriptionLine = task.description?.trim()
 			? "\t" + task.description.trim().replace(/\n/g, "\n\t")
@@ -406,67 +460,130 @@ export class ObsidianTasksRepo implements TaskRepository {
 		});
 
 		this.invalidateFile(targetFile);
-		return this.readAddedTask(file, insertedLine);
+		return this.readAddedTask(file, insertedLine, taskLine);
 	}
 
 	/**
 	 * Re-reads a freshly appended task once Obsidian has indexed the new line.
-	 * The task line is appended past the previous end of the file, so a list
-	 * item at `line` can only come from the updated metadata.
+	 *
+	 * The metadata cache can lag behind: when another write to the note just
+	 * before this one moved lines up (a deleted task, a split rule joined
+	 * into one line), an older index can already have a list item on the new
+	 * line's index, and the first re-index after that write does not have
+	 * the appended line yet. So a task is only taken as the added one when
+	 * its line is the line that was written, and until then each re-index of
+	 * the note is read again, up to a timeout.
 	 */
-	private async readAddedTask(file: TFile, line: number): Promise<Task> {
-		await this.waitForTaskItem(file, line);
-		this.invalidateFile(file.path);
+	private async readAddedTask(
+		file: TFile,
+		line: number,
+		writtenLine: string,
+	): Promise<Task> {
+		const reindexes = this.watchReindexes(file, ADDED_TASK_INDEX_TIMEOUT_MS);
+		let indexed = false;
+		try {
+			for (;;) {
+				const seen = reindexes.count();
+				if (this.hasTaskItemAt(file, line)) {
+					indexed = true;
+					const stored = await this.readTaskWrittenAt(
+						file,
+						line,
+						writtenLine,
+					);
+					if (stored) return stored;
+				}
+				if (!(await reindexes.after(seen))) break;
+			}
+		} finally {
+			reindexes.dispose();
+		}
+		throw new Error(
+			indexed
+				? `Task was written to ${file.path} (line ${line + 1}) but could not be read back as a task. List tasks to find its id before changing it.`
+				: `Task was written to ${file.path} (line ${line + 1}) but Obsidian did not index it within ${ADDED_TASK_INDEX_TIMEOUT_MS / 1000}s. List tasks to find its id before changing it.`,
+		);
+	}
 
+	/** Whether the metadata cache has a task item starting at `line`, column 0. */
+	private hasTaskItemAt(file: TFile, line: number): boolean {
+		return (
+			this.plugin.app.metadataCache
+				.getFileCache(file)
+				?.listItems?.some(
+					(item) =>
+						item.task !== undefined &&
+						item.position.start.line === line &&
+						item.position.start.col === 0,
+				) ?? false
+		);
+	}
+
+	/** The task at `line` if its line is `writtenLine`, remembered for writes. */
+	private async readTaskWrittenAt(
+		file: TFile,
+		line: number,
+		writtenLine: string,
+	): Promise<Task | undefined> {
+		this.invalidateFile(file.path);
 		// Read only this note: a full load would also replace the snapshots
 		// of tasks the caller has not re-read, hiding their staleness.
 		const tasks = await this.readFileTasks(file);
-		const stored = tasks.find(
-			(t) =>
+		const stored = tasks.find((t) => {
+			const position = t.extra?.position;
+			return (
 				t.extra?.file === file.path &&
-				t.extra?.position !== undefined &&
-				(JSON.parse(t.extra.position) as Pos).start.line === line,
-		);
-		if (!stored) {
-			throw new Error(
-				`Task was written to ${file.path} (line ${line + 1}) but could not be read back as a task. List tasks to find its id before changing it.`,
+				position !== undefined &&
+				(JSON.parse(position) as Pos).start.line === line &&
+				t.extra?.rawText?.split("\n")[0] === writtenLine
 			);
-		}
+		});
+		if (!stored) return undefined;
 		const snapshot = snapshotOf(stored);
 		if (snapshot) this.taskCache.set(stored.id, snapshot);
 		return stored;
 	}
 
-	private waitForTaskItem(file: TFile, line: number): Promise<void> {
+	/**
+	 * Counts the re-indexes of `file` from now on, for waiting on the next
+	 * one; waits end once `timeoutMs` has passed.
+	 */
+	private watchReindexes(file: TFile, timeoutMs: number) {
 		const metadataCache = this.plugin.app.metadataCache;
-		const hasTaskItem = () =>
-			metadataCache
-				.getFileCache(file)
-				?.listItems?.some(
-					(item) =>
-						item.task !== undefined &&
-						item.position.start.line === line,
-				) ?? false;
-
-		if (hasTaskItem()) return Promise.resolve();
-
-		return new Promise<void>((resolve, reject) => {
-			let timer: number | undefined;
-			const ref = metadataCache.on("changed", (changedFile) => {
-				if (changedFile.path !== file.path || !hasTaskItem()) return;
+		let count = 0;
+		let timedOut = false;
+		let waiters: (() => void)[] = [];
+		const wake = () => {
+			const woken = waiters;
+			waiters = [];
+			woken.forEach((waiter) => waiter());
+		};
+		const ref = metadataCache.on("changed", (changedFile) => {
+			if (changedFile.path !== file.path) return;
+			count++;
+			wake();
+		});
+		const timer = window.setTimeout(() => {
+			timedOut = true;
+			wake();
+		}, timeoutMs);
+		return {
+			count: () => count,
+			/** Resolves true on a re-index after the `seen`th, false on timeout. */
+			after: (seen: number) =>
+				new Promise<boolean>((resolve) => {
+					const check = () => {
+						if (count > seen) resolve(true);
+						else if (timedOut) resolve(false);
+						else waiters.push(check);
+					};
+					check();
+				}),
+			dispose: () => {
 				window.clearTimeout(timer);
 				metadataCache.offref(ref);
-				resolve();
-			});
-			timer = window.setTimeout(() => {
-				metadataCache.offref(ref);
-				reject(
-					new Error(
-						`Task was written to ${file.path} (line ${line + 1}) but Obsidian did not index it within ${ADDED_TASK_INDEX_TIMEOUT_MS / 1000}s. List tasks to find its id before changing it.`,
-					),
-				);
-			}, ADDED_TASK_INDEX_TIMEOUT_MS);
-		});
+			},
+		};
 	}
 
 	saveTasks(tasks: Task[]): Promise<void> {
@@ -487,6 +604,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 	 * lines, as a reload reads them), for callers that keep a copy
 	 */
 	async writeTaskLine(task: Task): Promise<string> {
+		assertSingleLineTitle(task, "update task");
 		// Prefer the snapshot: the UI component might not preserve extra fields
 		const snapshot = this.taskCache.get(task.id);
 		const filePath = task.extra?.file || snapshot?.file;
@@ -519,7 +637,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 		}
 		const position = snapshot?.position || task.extra?.position;
 
-		const outcome: { writtenLine?: string } = {};
+		const outcome: { writtenLine?: string; joinedLine?: string } = {};
 		await this.plugin.app.vault.process(file, (content) => {
 			const lines = content.split("\n");
 			const lineIndex = locateTaskLine(lines, expectedLine, position);
@@ -527,12 +645,25 @@ export class ObsidianTasksRepo implements TaskRepository {
 			if (originalLine === undefined) {
 				return content;
 			}
-			const newLine = taskToMarkdown(task, originalLine);
+			// A rule v0.8.0 split over this line and the next is joined
+			// back into this one. A task read without the rule's second
+			// line is first made the task the joined line holds.
+			const nextLine = lines[lineIndex + 1];
+			const repair = repairSplitRule(originalLine, nextLine);
+			const lineTask =
+				repair && !readWithRuleLine(expectedLine)
+					? asReadFromRepairedLine(task, originalLine, repair)
+					: task;
+			const newLine = writeTaskOnLine(
+				lineTask,
+				repair?.line ?? originalLine,
+			);
 			outcome.writtenLine = newLine;
+			outcome.joinedLine = repair ? nextLine : undefined;
 			return [
 				...lines.slice(0, lineIndex),
 				newLine,
-				...lines.slice(lineIndex + 1),
+				...lines.slice(lineIndex + (repair ? 2 : 1)),
 			].join("\n");
 		});
 
@@ -541,10 +672,16 @@ export class ObsidianTasksRepo implements TaskRepository {
 		}
 		// Remember the written line so a follow-up update of the same task
 		// (e.g. leaving inline edit mode) still matches before the next load.
-		// Its description lines below were left as they were.
+		// Its description lines below were left as they were, except the
+		// line of a rule joined into it.
+		const [, ...below] = expectedLine.split("\n");
+		const joined =
+			outcome.joinedLine !== undefined &&
+			below[0] !== undefined &&
+			isSameTaskLine(below[0], outcome.joinedLine);
 		const storedText = [
 			storedLineText(outcome.writtenLine, position),
-			...expectedLine.split("\n").slice(1),
+			...(joined ? below.slice(1) : below),
 		].join("\n");
 		this.taskCache.set(task.id, {
 			file: filePath,
@@ -554,6 +691,34 @@ export class ObsidianTasksRepo implements TaskRepository {
 		});
 		this.invalidateFile(filePath);
 		return storedText;
+	}
+
+	/**
+	 * The manual fix for a task whose recurrence rule v0.8.0 split over its
+	 * line and the next, for a task whose rule reads as "DTSTART…" (it was
+	 * read without the second line, or the rule can't be joined). See
+	 * {@link splitRuleFix}.
+	 *
+	 * @returns undefined when its line holds no split rule
+	 */
+	async splitRuleFix(id: string): Promise<string | undefined> {
+		const snapshot = this.taskCache.get(id);
+		if (!snapshot) {
+			throw new Error(
+				`Cannot read task ${id}: it was never read from the vault — query tasks again.`,
+			);
+		}
+		const file = this.plugin.app.vault.getAbstractFileByPath(snapshot.file);
+		if (!(file instanceof TFile)) {
+			throw new Error(`Cannot read task ${id}: file not found: ${snapshot.file}`);
+		}
+		const lines = (await this.plugin.app.vault.cachedRead(file)).split("\n");
+		const index = locateTaskLine(lines, snapshot.rawText, snapshot.position);
+		const line = lines[index];
+		if (line === undefined) {
+			throw new StaleTaskError(id);
+		}
+		return splitRuleFix(line, lines[index + 1]);
 	}
 
 	async deleteTask(id: string): Promise<void> {

@@ -5,14 +5,25 @@ import {
 } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "../../src/main";
 import { SecurityManager } from "../../src/mcpSecurity";
-import { createObsidianCapabilityContext } from "../../src/taskCapabilities";
+import {
+	createObsidianCapabilities,
+	createObsidianCapabilityContext,
+} from "../../src/taskCapabilities";
 import { taskLineVersion } from "../../src/taskLine";
 import { App, TFile } from "../mocks/obsidian";
+import { DateTime } from "luxon";
 import {
 	editExternally,
 	indexFile,
+	indexFileWithSplitRules,
 	reindexAfterWrites,
 } from "../helpers/testHelpers";
+import {
+	LEFT_START,
+	RESAVED_SPLIT_RULES,
+	RULE_LINE,
+	STRANDED_FIELD_RULES,
+} from "../fixtures/v080SplitRules";
 
 function createMcpCapabilities(content: string, blacklist = "") {
 	const app = new App();
@@ -37,7 +48,7 @@ function createMcpCapabilities(content: string, blacklist = "") {
 	securityManager.updateRules(blacklist);
 	const ctx = createObsidianCapabilityContext(plugin, securityManager);
 
-	return { app, file, ctx, capabilities: createCapabilities(ctx) };
+	return { app, file, ctx, capabilities: createObsidianCapabilities(ctx) };
 }
 
 /** The id query_tasks lists for the task titled `title`, as a client gets it. */
@@ -114,6 +125,78 @@ describe("createObsidianCapabilityContext (MCP)", () => {
 		await expect(app.vault.cachedRead(file)).resolves.toMatch(
 			/^- \[ \] Existing\n- \[ \] Renamed by agent/,
 		);
+	});
+});
+
+describe("createObsidianCapabilityContext create_task with Tasks syntax in the title (MCP)", () => {
+	it("stores the typed fields as written and reports them", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(
+			"- [ ] Existing\n",
+		);
+
+		const { result } = await capabilities.executeTool("create_task", {
+			title: "Pay rent 📅 2026-10-20 🔺",
+		});
+
+		expect(result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toMatch(
+			/^- \[ \] Existing\n- \[ \] Pay rent 📅 2026-10-20 🔺( ➕ \d{4}-\d{2}-\d{2})?\n$/,
+		);
+		const [, created] = (
+			(await capabilities.executeTool("query_tasks", {})).result as {
+				tasks: { title: string; dueAt?: string; priority: string }[];
+			}
+		).tasks;
+		expect(created).toMatchObject({
+			title: "Pay rent",
+			dueAt: "2026-10-20",
+			priority: "high",
+		});
+	});
+});
+
+describe("createObsidianCapabilityContext create_task with a line break in the title (MCP)", () => {
+	it.each([
+		["a line break", "Buy groceries:\n- [ ] milk\n- [ ] eggs"],
+		["a line separator (U+2028)", "Buy groceries:\u2028- [ ] milk"],
+		["a paragraph separator (U+2029)", "Buy groceries:\u2029- [ ] milk"],
+	])("refuses a title with %s before writing anything", async (_kind, title) => {
+		const { app, file, capabilities } = createMcpCapabilities(
+			"- [ ] Existing\n",
+		);
+		const processSpy = jest.spyOn(app.vault, "process");
+
+		const { result } = await capabilities.executeTool("create_task", {
+			title,
+		});
+
+		expect(result).not.toMatchObject({ success: true });
+		expect(JSON.stringify(result)).toMatch(/the title has a line break/);
+		expect(processSpy).not.toHaveBeenCalled();
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Existing\n",
+		);
+	});
+});
+
+describe("createObsidianCapabilityContext update_task with a line break in the title (MCP)", () => {
+	it.each([
+		["a line break", "Water plants\n- [ ] dup"],
+		["a line separator (U+2028)", "Water plants\u2028- [ ] dup"],
+		["a paragraph separator (U+2029)", "Water plants\u2029- [ ] dup"],
+	])("refuses a title with %s and leaves the note", async (_kind, title) => {
+		const content = "- [ ] Water plants 📅 2026-10-16\n";
+		const { app, file, capabilities } = createMcpCapabilities(content);
+		const id = await listedId(capabilities, "Water plants");
+
+		const { result } = await capabilities.executeTool("update_task", {
+			id,
+			title,
+		});
+
+		expect(result).not.toMatchObject({ success: true });
+		expect(JSON.stringify(result)).toMatch(/the title has a line break/);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
 	});
 });
 
@@ -201,7 +284,8 @@ describe("createObsidianCapabilityContext keeps task data current (MCP)", () => 
 
 		expect(result).toMatchObject({ success: true });
 		await expect(app.vault.cachedRead(file)).resolves.toBe(
-			`- [ ] Water plants ⏫ 📅 2026-10-17 🔁 every day\n${DONE}\n`,
+			// The line is edited in place: the new field goes after the last one.
+			`- [ ] Water plants 🔁 every day 📅 2026-10-17 ⏫\n${DONE}\n`,
 		);
 	});
 
@@ -347,6 +431,404 @@ describe("createObsidianCapabilityContext recurrence (MCP)", () => {
 		await expect(app.vault.cachedRead(file)).resolves.toBe(
 			"- [ ] Water plants 📅 2026-10-16\n",
 		);
+	});
+});
+
+describe("createObsidianCapabilityContext stores recurrence as Obsidian Tasks text (MCP)", () => {
+	it("sets recurrenceFormat to text", () => {
+		const { ctx } = createMcpCapabilities("- [ ] Existing\n");
+
+		expect(ctx.recurrenceFormat).toBe("text");
+	});
+
+	it("writes an RRULE from update_task as text", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(
+			"- [ ] Water plants 📅 2026-10-16\n",
+		);
+
+		const { result } = await capabilities.executeTool("update_task", {
+			id: await listedId(capabilities, "Water plants"),
+			recurrence: "FREQ=WEEKLY;BYDAY=MO",
+		});
+
+		expect(result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Water plants 📅 2026-10-16 🔁 every week on Monday\n",
+		);
+	});
+
+	it("rejects a rule with a start date before batch_update_tasks writes anything", async () => {
+		const content = "- [ ] First 📅 2026-10-16\n- [ ] Second 📅 2026-10-16\n";
+		const { app, file, capabilities } = createMcpCapabilities(content);
+		const processSpy = jest.spyOn(app.vault, "process");
+
+		const { result } = await capabilities.executeTool("batch_update_tasks", {
+			filter: { status: "todo" },
+			update: { recurrence: "DTSTART:20261016T000000Z\nRRULE:FREQ=WEEKLY" },
+		});
+
+		expect(JSON.stringify(result)).toMatch(/DTSTART/);
+		expect(result).not.toMatchObject({ success: true });
+		expect(processSpy).not.toHaveBeenCalled();
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+});
+
+describe("createObsidianCapabilityContext refuses rules with a count (MCP)", () => {
+	const COUNT_ERROR = /COUNT.*never ends here, because each completion counts again/;
+
+	it.each([["FREQ=WEEKLY;COUNT=3"], ["RRULE:FREQ=WEEKLY;COUNT=3"], ["freq=weekly;count=3"]])(
+		"rejects %s from create_task before writing anything",
+		async (recurrence) => {
+			const content = "- [ ] Existing\n";
+			const { app, file, capabilities } = createMcpCapabilities(content);
+			const processSpy = jest.spyOn(app.vault, "process");
+
+			const { result } = await capabilities.executeTool("create_task", {
+				title: "Probe",
+				dueAt: "2026-10-20",
+				recurrence,
+			});
+
+			expect(result).toMatchObject({ success: false, error: expect.stringMatching(COUNT_ERROR) });
+			expect(processSpy).not.toHaveBeenCalled();
+			await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+		},
+	);
+
+	it("rejects a count from update_task before writing anything", async () => {
+		const content = "- [ ] Water plants 📅 2026-10-16\n";
+		const { app, file, capabilities } = createMcpCapabilities(content);
+		const id = await listedId(capabilities, "Water plants");
+		const processSpy = jest.spyOn(app.vault, "process");
+
+		const { result } = await capabilities.executeTool("update_task", {
+			id,
+			recurrence: "FREQ=MONTHLY;COUNT=5",
+		});
+
+		expect(result).toMatchObject({ success: false, error: expect.stringMatching(COUNT_ERROR) });
+		expect(processSpy).not.toHaveBeenCalled();
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+
+	it("rejects a count from batch_update_tasks before writing anything", async () => {
+		const content = "- [ ] First 📅 2026-10-16\n- [ ] Second 📅 2026-10-16\n";
+		const { app, file, capabilities } = createMcpCapabilities(content);
+		const processSpy = jest.spyOn(app.vault, "process");
+
+		const { result } = await capabilities.executeTool("batch_update_tasks", {
+			filter: { status: "todo" },
+			update: { recurrence: "FREQ=DAILY;COUNT=2" },
+		});
+
+		expect(result).toMatchObject({ success: false, error: expect.stringMatching(COUNT_ERROR) });
+		expect(processSpy).not.toHaveBeenCalled();
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+
+	it("serves the checked tools to the MCP server too", async () => {
+		const { capabilities } = createMcpCapabilities("- [ ] Existing\n");
+
+		const { result } = await capabilities
+			.getTool("create_task")!
+			.execute({ title: "Probe", recurrence: "FREQ=WEEKLY;COUNT=3" });
+
+		expect(result).toMatchObject({ success: false, error: expect.stringMatching(COUNT_ERROR) });
+	});
+
+	it("still accepts an end date", async () => {
+		const { app, file, capabilities } = createMcpCapabilities("- [ ] Existing\n");
+
+		const { result } = await capabilities.executeTool("create_task", {
+			title: "Probe",
+			dueAt: "2026-10-20",
+			recurrence: "FREQ=WEEKLY;UNTIL=20261231",
+		});
+
+		expect(result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toMatch(
+			/- \[ \] Probe 📅 2026-10-20 .*🔁 every week until December 31, 2026/,
+		);
+	});
+});
+
+describe("createObsidianCapabilityContext with Dataview inline fields (MCP)", () => {
+	it("completes a recurring task whose due date is a Dataview field after its fields", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(
+			"- [ ] Review 🔁 every week ➕ 2026-10-01 [[due:: 2026-10-16]]\n",
+		);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: await listedId(capabilities, "Review"),
+		});
+
+		expect(result).toMatchObject({ success: true });
+		const [done, next] = (await app.vault.cachedRead(file)).split("\n");
+		expect(done).toMatch(
+			/^- \[x\] Review 🔁 every week ➕ 2026-10-01 ✅ \d{4}-\d{2}-\d{2} \[\[due:: 2026-10-16\]\]$/,
+		);
+		// The next due date goes in the Dataview field, as on the done line.
+		expect(next).toMatch(
+			/^- \[ \] Review ➕ \d{4}-\d{2}-\d{2} 🔁 every week \[\[due:: 2026-10-23\]\]$/,
+		);
+	});
+});
+
+describe("createObsidianCapabilityContext with reminders (MCP)", () => {
+	it("keeps a (@) reminder on the done line but not on the next occurrence", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(
+			"- [ ] Call mom 🔁 every week 📅 2026-10-16 (@2026-10-16 09:00)\n",
+		);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: await listedId(capabilities, "Call mom"),
+		});
+
+		expect(result).toMatchObject({ success: true });
+		const [done, next] = (await app.vault.cachedRead(file)).split("\n");
+		expect(done).toMatch(/^- \[x\] Call mom .* \(@2026-10-16 09:00\)$/);
+		// A reminder is for one occurrence, as the library treats ⏰.
+		expect(next).toMatch(/^- \[ \] Call mom .*📅 2026-10-23/);
+		expect(next).not.toContain("(@");
+	});
+});
+
+describe("createObsidianCapabilityContext with a rule v0.8.0 split over two lines (MCP)", () => {
+	it("completes the task, repairs its line and adds the next occurrence", async () => {
+		const start = DateTime.fromISO("2026-10-16")
+			.toUTC()
+			.toFormat("yyyyMMdd'T'HHmmss'Z'");
+		const content = `- [ ] Report 📅 2026-10-16 🔁 DTSTART:${start}\nRRULE:FREQ=WEEKLY;INTERVAL=1\n`;
+		const { app, file, capabilities } = createMcpCapabilities(content);
+		indexFileWithSplitRules(app, "Tasks.md", content);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: await listedId(capabilities, "Report"),
+		});
+
+		expect(result).toMatchObject({ success: true });
+		const lines = (await app.vault.cachedRead(file)).split("\n");
+		expect(lines).toEqual([
+			expect.stringMatching(
+				/^- \[x\] Report 📅 2026-10-16 🔁 every week on Friday ✅ \d{4}-\d{2}-\d{2}$/,
+			),
+			expect.stringMatching(
+				/^- \[ \] Report 📅 2026-10-23 ➕ \d{4}-\d{2}-\d{2} 🔁 every week on Friday$/,
+			),
+			"",
+		]);
+	});
+});
+
+describe("createObsidianCapabilityContext with a split rule above another task (MCP)", () => {
+	it("reports the next occurrence it added, not a failure", async () => {
+		const start = DateTime.fromISO("2026-10-16")
+			.toUTC()
+			.toFormat("yyyyMMdd'T'HHmmss'Z'");
+		const content = `# H\n- [ ] Report 📅 2026-10-16 🔁 DTSTART:${start}\nRRULE:FREQ=WEEKLY;INTERVAL=1\n- [ ] Next\n`;
+		const { app, file, capabilities } = createMcpCapabilities(content);
+		indexFileWithSplitRules(app, "Tasks.md", content);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: await listedId(capabilities, "Report"),
+		});
+
+		expect(result).toMatchObject({ success: true });
+		const lines = (await app.vault.cachedRead(file)).split("\n");
+		expect(lines).toEqual([
+			"# H",
+			expect.stringMatching(
+				/^- \[x\] Report 📅 2026-10-16 🔁 every week on Friday ✅ \d{4}-\d{2}-\d{2}$/,
+			),
+			"- [ ] Next",
+			expect.stringMatching(
+				/^- \[ \] Report 📅 2026-10-23 ➕ \d{4}-\d{2}-\d{2} 🔁 every week on Friday$/,
+			),
+			"",
+		]);
+	});
+});
+
+/*
+ * Lines v0.8.0 split and saved again (see the fixtures), with the priority,
+ * tag or dates it wrote before the start date it left in the title.
+ */
+describe("createObsidianCapabilityContext with a rule v0.8.0 split and saved again (MCP)", () => {
+	interface ListedTask {
+		id: string;
+		title: string;
+		status: string;
+		priority: string;
+		dueAt?: string;
+	}
+
+	async function listed(capabilities: Capabilities): Promise<ListedTask[]> {
+		const { result } = await capabilities.executeTool("query_tasks", {});
+		return (result as { tasks: ListedTask[] }).tasks;
+	}
+
+	function createResaved(line: string, index = indexFileWithSplitRules) {
+		const content = `${line}\n${RULE_LINE}\n- [ ] Next\n`;
+		const created = createMcpCapabilities(content);
+		index(created.app, "Tasks.md", content);
+		return { ...created, content };
+	}
+
+	const open = RESAVED_SPLIT_RULES.filter(
+		(fixture) => fixture.read.status !== "done",
+	);
+
+	it.each(open.map((fixture) => [fixture.name, fixture] as const))(
+		"completes a task with %s, keeping its priority on both occurrences",
+		async (_name, fixture) => {
+			const { app, file, capabilities } = createResaved(fixture.line);
+
+			const { result } = await capabilities.executeTool("complete_task", {
+				id: await listedId(capabilities, fixture.read.title!),
+			});
+
+			expect(result).toMatchObject({
+				success: true,
+				createdNextOccurrence: true,
+			});
+			const lines = (await app.vault.cachedRead(file)).split("\n");
+			expect(lines).toEqual([
+				expect.stringMatching(/^- \[x\] .*🔁 every week on Friday/),
+				"- [ ] Next",
+				expect.stringMatching(/^- \[ \] .*🔁 every week on Friday/),
+				"",
+			]);
+			expect(lines.join("\n")).not.toContain("DTSTART");
+			indexFile(app, "Tasks.md", lines.join("\n"));
+			const [done, , next] = await listed(capabilities);
+			expect(done).toMatchObject({
+				title: fixture.read.title,
+				status: "done",
+				priority: fixture.read.priority,
+			});
+			expect(next).toMatchObject({
+				title: fixture.read.title,
+				priority: fixture.read.priority,
+				dueAt: DateTime.fromISO(fixture.read.dueAt!)
+					.plus({ weeks: 1 })
+					.toISODate(),
+			});
+		},
+	);
+
+	it.each(
+		RESAVED_SPLIT_RULES.flatMap((fixture) => [
+			[fixture.name, "with", fixture, indexFileWithSplitRules] as const,
+			[fixture.name, "without", fixture, indexFile] as const,
+		]),
+	)(
+		"changes the priority of a task with %s, indexed %s the rule's second line",
+		async (_name, _with, fixture, index) => {
+			const { app, file, capabilities } = createResaved(fixture.line, index);
+			const priority = fixture.read.priority === "low" ? "high" : "low";
+			const [listedTask] = await listed(capabilities);
+
+			const { result } = await capabilities.executeTool("update_task", {
+				id: listedTask!.id,
+				priority,
+			});
+
+			expect(result).toMatchObject({ success: true });
+			const content = await app.vault.cachedRead(file);
+			expect(content).toMatch(/^- \[.\] .*🔁 every week on Friday.*\n- \[ \] Next\n$/);
+			expect(content).not.toContain("DTSTART");
+			indexFile(app, "Tasks.md", content);
+			const [task] = await listed(capabilities);
+			expect(task).toMatchObject({ title: fixture.read.title, priority });
+		},
+	);
+
+	/*
+	 * A field left in the title before the start date and written after it
+	 * too: query_tasks lists the one after it, as v0.8.0 and Obsidian Tasks
+	 * read it, and update_task stores that one, dropping the other.
+	 */
+	describe.each([
+		["with", indexFileWithSplitRules],
+		["without", indexFile],
+	])("a field left in the title and written after the start date, indexed %s the rule's second line", (_with, index) => {
+		it.each(
+			STRANDED_FIELD_RULES.flatMap((fixture) => [
+				[
+					fixture.name,
+					"a rename",
+					fixture,
+					{ title: "Monthly summary" },
+					fixture.repaired.replace("Report", "Monthly summary"),
+				] as const,
+				[
+					fixture.name,
+					"a reschedule",
+					fixture,
+					{ dueAt: "2026-10-23" },
+					fixture.repaired.replace("📅 2026-10-16", "📅 2026-10-23"),
+				] as const,
+			]),
+		)("%s: lists the field after the start date and stores it on %s", async (_name, _edit, fixture, args, line) => {
+			const { app, file, capabilities } = createResaved(fixture.line, index);
+			const [listedTask] = await listed(capabilities);
+			expect(listedTask).toMatchObject({
+				priority: fixture.read.priority ?? "medium",
+				dueAt: fixture.read.dueAt,
+			});
+
+			const { result } = await capabilities.executeTool("update_task", {
+				id: listedTask!.id,
+				...args,
+			});
+
+			expect(result).toMatchObject({ success: true });
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				`${line}\n- [ ] Next\n`,
+			);
+		});
+	});
+
+	it("refuses to complete an open task indexed without the rule's second line, with the manual fix", async () => {
+		const fixture = open.find((f) => f.read.priority === "low")!;
+		const { app, file, capabilities, content } = createResaved(
+			fixture.line,
+			indexFile,
+		);
+		const [task] = await listed(capabilities);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: task!.id,
+		});
+
+		expect(result).toMatchObject({ success: false });
+		const error = (result as { error: string }).error;
+		expect(error).toMatch(/v0\.8\.0 split over two lines/);
+		expect(error).toContain(
+			`delete the "RRULE:" line below the task, remove "${LEFT_START}" from the title, and replace "🔁 DTSTART" with "🔁 every week on Friday"`,
+		);
+		expect(error).toMatch(/was not completed/);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+
+	it("refuses to complete a task whose rule can't be joined, with the manual fix", async () => {
+		const content = `- [ ] Report ⏫  ${LEFT_START} 📅 2026-10-16 🔁 DTSTART\nRRULE:FREQ=WEEKLY;COUNT=5\n`;
+		const { app, file, capabilities } = createMcpCapabilities(content);
+		indexFileWithSplitRules(app, "Tasks.md", content);
+		const [task] = await listed(capabilities);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: task!.id,
+		});
+
+		expect(result).toMatchObject({ success: false });
+		expect((result as { error: string }).error).toMatch(
+			new RegExp(
+				`COUNT.*delete the "RRULE:" line below the task, remove "${LEFT_START}" from the title.*was not completed`,
+			),
+		);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
 	});
 });
 

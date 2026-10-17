@@ -360,3 +360,37 @@ export function reindexAfterWrites(app: App) {
 			}, 0);
 		});
 }
+
+/**
+ * Like {@link indexFile}, but a task's list item also spans an "RRULE:" line
+ * right below it, as Obsidian counts such a lazy continuation line: the
+ * second line of a recurrence rule v0.8.0 split in two.
+ */
+export function indexFileWithSplitRules(
+	app: App,
+	path: string,
+	content: string,
+) {
+	const lines = content.split("\n");
+	const listItems = createListItems(content).map((item) => {
+		const next = lines[item.position.end.line + 1];
+		if (next === undefined || !next.startsWith("RRULE:")) return item;
+		return {
+			...item,
+			position: {
+				...item.position,
+				end: {
+					line: item.position.end.line + 1,
+					col: next.length,
+					offset: item.position.end.offset + 1 + next.length,
+				},
+			},
+		};
+	});
+	app.metadataCache._setCache(path, {
+		listItems,
+		sections: [],
+		links: [],
+		tags: [],
+	});
+}

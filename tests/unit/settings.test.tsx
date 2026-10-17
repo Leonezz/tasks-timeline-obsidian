@@ -1,7 +1,9 @@
-import { act } from "@testing-library/react";
-import type { AppSettings } from "@tasks-timeline/components";
+import { act, render } from "@testing-library/react";
+import type React from "react";
+import type { AppSettings, VoiceRuntime } from "@tasks-timeline/components";
 import type { App as ObsidianApp } from "obsidian";
 import type TasksTimelineObsidianPlugin from "../../src/main";
+import { obsidianFetch } from "../../src/obsidianHttp";
 import { DEFAULT_SETTINGS, TasksTimelineSettingTab } from "../../src/settings";
 import * as obsidian from "../mocks/obsidian";
 
@@ -12,9 +14,12 @@ interface McpTabProps {
 }
 
 interface CapturedSettingsPageProps {
-	settings: AppSettings;
-	onUpdateSettings: (settings: AppSettings) => void;
 	customTabs: { content: { props: McpTabProps } }[];
+	settings: AppSettings;
+	voiceRuntime?: VoiceRuntime;
+	aiFetch?: typeof fetch;
+	aiProviderFactory?: unknown;
+	onUpdateSettings: (settings: AppSettings) => void;
 }
 
 let mockPageProps: CapturedSettingsPageProps | undefined;
@@ -63,6 +68,19 @@ function createTab(saveSettings: jest.Mock<Promise<void>, []>) {
 		},
 		saveSettings,
 		updateSecurityBlacklist: jest.fn(),
+		getAuthToken: jest.fn<Promise<string>, []>().mockResolvedValue("token"),
+		getMcpStats: () => ({
+			query_tasks: { total: 2, successful: 2, failed: 0 },
+		}),
+		getMcpSessionSummaries: () => [
+			{
+				sessionId: "abc123",
+				clientName: "client",
+				clientVersion: "1.0",
+				durationSeconds: 120,
+				toolCalls: { total: 1, successful: 1, failed: 0 },
+			},
+		],
 		restartMcpServer: jest.fn<Promise<void>, []>().mockResolvedValue(),
 		bus: { on: () => () => undefined, emit: jest.fn() },
 	} as unknown as TasksTimelineObsidianPlugin;
@@ -133,10 +151,50 @@ describe("TasksTimelineSettingTab", () => {
 		act(() => tab.hide());
 	});
 
+	it("gives the AI page the timeline's voice runtime and fetch", () => {
+		const { tab } = createTab(jest.fn<Promise<void>, []>().mockResolvedValue());
+		act(() => tab.display());
+
+		// The Browser voice provider is shown as unavailable, and Test
+		// Connection goes through requestUrl.
+		expect(mockPageProps?.voiceRuntime?.browserSpeechSupported).toBe(false);
+		expect(mockPageProps?.aiFetch).toBe(obsidianFetch);
+		expect(mockPageProps?.aiProviderFactory).toBeUndefined();
+		act(() => tab.hide());
+	});
+
 	describe("MCP server settings", () => {
 		const mcpTab = () => mockPageProps!.customTabs[0]!.content.props;
 		const failingSave = () =>
 			jest.fn<Promise<void>, []>().mockRejectedValue(new Error("disk full"));
+
+		it("styles the tab with the library's theme tokens", async () => {
+			const { tab } = createTab(jest.fn<Promise<void>, []>().mockResolvedValue());
+			act(() => tab.display());
+			const { container } = render(
+				mockPageProps!.customTabs[0]!.content as unknown as React.ReactElement,
+			);
+			await act(flushPromises);
+
+			const classes = Array.from(container.querySelectorAll("[class]")).flatMap(
+				(element) => element.className.split(/\s+/),
+			);
+			// `dark:` utilities follow the OS, not the theme, and invert the
+			// theme's own colors twice; orange-* is not in the library's CSS.
+			expect(classes.filter((name) => name.startsWith("dark:"))).toEqual([]);
+			expect(classes.filter((name) => name.includes("orange-"))).toEqual([]);
+			const button = (label: string) =>
+				Array.from(container.querySelectorAll("button")).find(
+					(element) => element.textContent === label,
+				);
+			expect(button("Copy")?.className).toContain(
+				"bg-primary text-primary-foreground",
+			);
+			expect(button("Regenerate")?.className).toContain(
+				"bg-destructive text-destructive-foreground",
+			);
+			act(() => tab.hide());
+		});
 
 		it("applies a blacklist to the running server even when saving fails", async () => {
 			const { tab, plugin } = createTab(failingSave());

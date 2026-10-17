@@ -41,7 +41,7 @@ function renderInlineMarkdown(
 			inline
 			compact
 			className="tasks-timeline-title-markdown"
-			paragraphClassName="inline whitespace-pre-wrap"
+			paragraphClassName="inline"
 			codeClassName="rounded bg-slate-100/80 px-1 py-0 font-mono text-[0.9em] text-slate-700"
 			linkClassName="font-medium text-blue-600 underline decoration-blue-300 underline-offset-2"
 		/>
