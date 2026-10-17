@@ -6,7 +6,11 @@ import {
 	taskUpdateNeedsWrite,
 } from "../../src/tasksRepo";
 import { App, TFile } from "../mocks/obsidian";
-import { indexFile, reindexAfterWrites } from "../helpers/testHelpers";
+import {
+	createListItems,
+	indexFile,
+	reindexAfterWrites,
+} from "../helpers/testHelpers";
 
 function createRepo(content: string) {
 	const app = new App();
@@ -665,16 +669,42 @@ describe("ObsidianTasksRepo deleting a task with sub-tasks", () => {
 		["a description and a sub-task", "- [ ] Parent\n\tNotes\n\t- [ ] Child\n", "Tasks.md:0:0"],
 		["a plain sub-bullet", "- [ ] Parent\n\t- A note\n", "Tasks.md:0:0"],
 		["a blank line before the sub-task", "- [ ] Parent\n\n\t- [ ] Child\n", "Tasks.md:0:0"],
-		[
-			"a paragraph before the sub-task",
-			"- [ ] Parent\n\n\tSome notes\n\n\t- [ ] Child\n",
-			"Tasks.md:0:0",
-		],
 	])("refuses when it has nested items (%s)", async (_kind, content, id) => {
 		const { app, file, repo } = createRepo(content);
 		await repo.loadTasks();
 
 		await expect(repo.deleteTask(id)).rejects.toThrow(
+			"Cannot delete task: it has sub-tasks or other nested items — delete or move them first.",
+		);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+
+	it("refuses when a paragraph comes before the sub-task", async () => {
+		const content = "- [ ] Parent\n\n\tSome notes\n\n\t- [ ] Child\n";
+		const { app, file, repo } = createRepo(content);
+		// Like Obsidian's index, the parent's item spans the indented
+		// paragraph after the blank line (see continuesItem in taskLine.ts).
+		const [parent, ...others] = createListItems(content);
+		const paragraphEnd =
+			content.indexOf("\tSome notes") + "\tSome notes".length;
+		app.metadataCache._setCache("Tasks.md", {
+			listItems: [
+				{
+					...parent!,
+					position: {
+						start: parent!.position.start,
+						end: { line: 2, col: "\tSome notes".length, offset: paragraphEnd },
+					},
+				},
+				...others,
+			],
+			sections: [],
+			links: [],
+			tags: [],
+		});
+		await repo.loadTasks();
+
+		await expect(repo.deleteTask("Tasks.md:0:0")).rejects.toThrow(
 			"Cannot delete task: it has sub-tasks or other nested items — delete or move them first.",
 		);
 		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
