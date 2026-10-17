@@ -1,5 +1,5 @@
 import { act } from "@testing-library/react";
-import type { AppSettings } from "@tasks-timeline/components";
+import type { AppSettings, VoiceRuntime } from "@tasks-timeline/components";
 import type { App as ObsidianApp } from "obsidian";
 import type TasksTimelineObsidianPlugin from "../../src/main";
 import { DEFAULT_SETTINGS, TasksTimelineSettingTab } from "../../src/settings";
@@ -13,6 +13,7 @@ interface McpTabProps {
 
 interface CapturedSettingsPageProps {
 	settings: AppSettings;
+	voiceRuntime?: VoiceRuntime;
 	onUpdateSettings: (settings: AppSettings) => void;
 	customTabs: { content: { props: McpTabProps } }[];
 }
@@ -130,6 +131,15 @@ describe("TasksTimelineSettingTab", () => {
 		await updateSettings(withTheme("light"));
 
 		expect(noticeSpy).toHaveBeenCalledTimes(2);
+		act(() => tab.hide());
+	});
+
+	it("gives the AI page the timeline's voice runtime", () => {
+		const { tab } = createTab(jest.fn<Promise<void>, []>().mockResolvedValue());
+		act(() => tab.display());
+
+		// The Browser voice provider is shown as unavailable.
+		expect(mockPageProps?.voiceRuntime?.browserSpeechSupported).toBe(false);
 		act(() => tab.hide());
 	});
 

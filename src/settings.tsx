@@ -14,11 +14,13 @@ import {
 	CustomSettingsTab,
 	SecretFieldContext,
 	SettingsPage,
+	type VoiceRuntime,
 } from "@tasks-timeline/components";
 import { TimelineErrorBoundary, unmountReactRoot } from "./view";
 import type { StatsData } from "./mcpStats";
 import type { SessionSummary } from "./mcpServer";
 import { getActiveWindow } from "./obsidianDom";
+import { createObsidianVoiceRuntime } from "./obsidianHttp";
 import { ObsidianSecretField } from "./secretField";
 import type { SecretSelectorMap } from "./secretStorage";
 
@@ -143,6 +145,7 @@ function SettingsPageWrapper({
 	inDarkMode,
 	customTabs,
 	renderSecretField,
+	voiceRuntime,
 }: {
 	getInitialSettings: () => AppSettings;
 	onPersistSettings: (s: AppSettings) => void;
@@ -151,6 +154,7 @@ function SettingsPageWrapper({
 	inDarkMode: boolean;
 	customTabs: CustomSettingsTab[];
 	renderSecretField: (context: SecretFieldContext) => React.ReactNode;
+	voiceRuntime: VoiceRuntime;
 }) {
 	const [settings, setSettings] = useState(getInitialSettings);
 
@@ -170,6 +174,9 @@ function SettingsPageWrapper({
 			inDarkMode={inDarkMode}
 			customTabs={customTabs}
 			renderSecretField={renderSecretField}
+			// The same as the timeline's, so the AI page shows the Browser
+			// voice provider as unavailable.
+			voiceRuntime={voiceRuntime}
 		/>
 	);
 }
@@ -801,6 +808,7 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 								plugin={this.plugin}
 							/>
 						)}
+						voiceRuntime={createObsidianVoiceRuntime(this.app)}
 					/>
 				</TimelineErrorBoundary>
 			</React.StrictMode>,

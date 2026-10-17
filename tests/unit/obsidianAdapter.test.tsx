@@ -1,5 +1,5 @@
 import { render, waitFor } from "@testing-library/react";
-import type { Task } from "@tasks-timeline/components";
+import type { Task, VoiceRuntime } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "../../src/main";
 import { ObsidianAdaptor } from "../../src/obsidianAdapter";
 import * as obsidian from "../mocks/obsidian";
@@ -10,6 +10,7 @@ interface CapturedAppProps {
 	onTaskUpdated: (task: Task, previous: Task) => Promise<void>;
 	onTaskDeleted: (taskId: string, previous: Task) => Promise<void>;
 	recurrenceFormat?: string;
+	voiceRuntime?: VoiceRuntime;
 }
 
 let mockAppProps: CapturedAppProps | undefined;
@@ -71,6 +72,12 @@ describe("ObsidianAdaptor task handlers", () => {
 		const { props } = await renderAdaptor("- [ ] Pay rent\n");
 
 		expect(props.recurrenceFormat).toBe("text");
+	});
+
+	it("declares browser speech unsupported", async () => {
+		const { props } = await renderAdaptor("- [ ] Pay rent\n");
+
+		expect(props.voiceRuntime?.browserSpeechSupported).toBe(false);
 	});
 
 	it("rejects and shows the reason when the vault write fails", async () => {

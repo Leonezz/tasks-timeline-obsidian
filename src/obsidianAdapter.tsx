@@ -1,8 +1,4 @@
-import {
-	Task,
-	TasksTimelineApp,
-	type VoiceRuntime,
-} from "@tasks-timeline/components";
+import { Task, TasksTimelineApp } from "@tasks-timeline/components";
 import { Events } from "eventbus";
 import TasksTimelineObsidianPlugin from "main";
 import {
@@ -17,8 +13,8 @@ import { ObsidianTasksRepo, taskUpdateNeedsWrite } from "./tasksRepo";
 import { isSameTaskLine, StaleTaskError } from "./taskLine";
 import { ObsidianSecretField } from "./secretField";
 import { createRenderTitle } from "./titleRenderer";
-import { App, debounce, Notice, Pos, requestUrl, TFile } from "obsidian";
-import { getActiveWindow } from "./obsidianDom";
+import { App, debounce, Notice, Pos, TFile } from "obsidian";
+import { createObsidianVoiceRuntime } from "./obsidianHttp";
 
 interface ObsidianAdaptorProps {
 	plugin: TasksTimelineObsidianPlugin;
@@ -106,24 +102,8 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 		() => new ObsidianSettingRepo(plugin),
 	);
 	const renderTitle = useMemo(() => createRenderTitle(plugin.app), [plugin]);
-	const voiceRuntime = useMemo<VoiceRuntime>(
-		() => ({
-			win: getActiveWindow(plugin.app),
-			request: async (request) => {
-				const response = await requestUrl({
-					url: request.url,
-					method: request.method,
-					headers: request.headers,
-					contentType: request.contentType,
-					body: request.body,
-					throw: false,
-				});
-				return {
-					status: response.status,
-					text: response.text,
-				};
-			},
-		}),
+	const voiceRuntime = useMemo(
+		() => createObsidianVoiceRuntime(plugin.app),
 		[plugin.app],
 	);
 

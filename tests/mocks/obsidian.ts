@@ -224,7 +224,27 @@ export function debounce<T extends unknown[]>(
 	return debounced;
 }
 
-export async function requestUrl(): Promise<never> {
+export interface RequestUrlParam {
+	url: string;
+	method?: string;
+	contentType?: string;
+	body?: string | ArrayBuffer;
+	headers?: Record<string, string>;
+	throw?: boolean;
+}
+
+export interface RequestUrlResponse {
+	status: number;
+	headers: Record<string, string>;
+	arrayBuffer: ArrayBuffer;
+	json: unknown;
+	text: string;
+}
+
+/** Tests replace this with jest.spyOn. */
+export async function requestUrl(
+	_request: RequestUrlParam | string,
+): Promise<RequestUrlResponse> {
 	throw new Error("requestUrl is not available in tests");
 }
 
