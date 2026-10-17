@@ -36,7 +36,127 @@ export interface ResavedSplitRule {
 	read: Partial<Task> & { scheduledAt?: string; tagNames?: string[] };
 	/** The line the two lines are joined into. */
 	repaired: string;
+	/**
+	 * The fields left in the title before the start date that the line also
+	 * holds after it, which the joined line drops.
+	 */
+	stranded?: string[];
 }
+
+/*
+ * A field v0.8.0 left in the title before the start date, and the same
+ * field written after it: v0.8.0 wrote ⏫ / 🔽 there when the priority was
+ * set after its save, and the Tasks plugin or a hand edit can write any
+ * other field there. v0.8.0 and Obsidian Tasks read the field after the
+ * start date (their parsers stop at it), so the joined line holds that one
+ * and not the field left in the title.
+ */
+const PRIORITY_EMOJI: Record<string, Task["priority"]> = {
+	"🔺": "high",
+	"⏫": "high",
+	"🔼": "medium",
+	"🔽": "low",
+	"⏬": "low",
+};
+
+/** Each priority left in the title, followed by a different one after it. */
+const CONTRADICTED_PRIORITIES: ResavedSplitRule[] = Object.keys(
+	PRIORITY_EMOJI,
+).flatMap((stranded) =>
+	Object.keys(PRIORITY_EMOJI)
+		.filter((after) => after !== stranded)
+		.map((after) => ({
+			name: `${stranded} left in the title, ${after} after it`,
+			line: `- [ ] Report ${stranded}  ${LEFT_START} ${after} 📅 2026-10-16 🔁 DTSTART`,
+			read: {
+				title: "Report",
+				priority: PRIORITY_EMOJI[after],
+				dueAt: "2026-10-16",
+			},
+			repaired: `- [ ] Report ${after} 📅 2026-10-16 🔁 every week on Friday`,
+			stranded: [stranded],
+		})),
+);
+
+export const STRANDED_FIELD_RULES: ResavedSplitRule[] = [
+	...CONTRADICTED_PRIORITIES,
+	{
+		name: "a due date left in the title, another after it",
+		line: `- [ ] Report 📅 2026-10-09  ${LEFT_START} 📅 2026-10-16 🔁 DTSTART`,
+		read: { title: "Report", priority: "medium", dueAt: "2026-10-16" },
+		repaired: "- [ ] Report 📅 2026-10-16 🔁 every week on Friday",
+		stranded: ["📅 2026-10-09"],
+	},
+	{
+		name: "a start date left in the title, another after it",
+		line: `- [ ] Report 🛫 2026-10-01  ${LEFT_START} 🛫 2026-10-10 📅 2026-10-16 🔁 DTSTART`,
+		read: {
+			title: "Report",
+			priority: "medium",
+			startAt: "2026-10-10",
+			dueAt: "2026-10-16",
+		},
+		repaired:
+			"- [ ] Report 🛫 2026-10-10 📅 2026-10-16 🔁 every week on Friday",
+		stranded: ["🛫 2026-10-01"],
+	},
+	{
+		name: "a scheduled date left in the title, another after it",
+		line: `- [ ] Report ⏳ 2026-10-12  ${LEFT_START} ⏳ 2026-10-14 📅 2026-10-16 🔁 DTSTART`,
+		read: {
+			title: "Report",
+			priority: "medium",
+			scheduledAt: "2026-10-14",
+			dueAt: "2026-10-16",
+		},
+		repaired:
+			"- [ ] Report ⏳ 2026-10-14 📅 2026-10-16 🔁 every week on Friday",
+		stranded: ["⏳ 2026-10-12"],
+	},
+	{
+		name: "an id left in the title, another after it",
+		line: `- [ ] Report 🆔 abc  ${LEFT_START} 🆔 def 📅 2026-10-16 🔁 DTSTART`,
+		read: {
+			title: "Report",
+			priority: "medium",
+			taskId: "def",
+			dueAt: "2026-10-16",
+		},
+		repaired: "- [ ] Report 🆔 def 📅 2026-10-16 🔁 every week on Friday",
+		stranded: ["🆔 abc"],
+	},
+	{
+		name: "a dependency left in the title, another after it",
+		line: `- [ ] Report ⛔ abc  ${LEFT_START} ⛔ def 📅 2026-10-16 🔁 DTSTART`,
+		read: {
+			title: "Report",
+			priority: "medium",
+			dependsOn: ["def"],
+			dueAt: "2026-10-16",
+		},
+		repaired: "- [ ] Report ⛔ def 📅 2026-10-16 🔁 every week on Friday",
+		stranded: ["⛔ abc"],
+	},
+	{
+		name: "an on-completion action left in the title, another after it",
+		line: `- [ ] Report 🏁 delete  ${LEFT_START} 🏁 keep 📅 2026-10-16 🔁 DTSTART`,
+		read: {
+			title: "Report",
+			priority: "medium",
+			onCompletion: "keep",
+			dueAt: "2026-10-16",
+		},
+		repaired: "- [ ] Report 🏁 keep 📅 2026-10-16 🔁 every week on Friday",
+		stranded: ["🏁 delete"],
+	},
+	{
+		name: "a priority and a due date left in the title, others after them",
+		line: `- [ ] Report ⏫ 📅 2026-10-09  ${LEFT_START} 🔽 📅 2026-10-16 🔁 DTSTART`,
+		read: { title: "Report", priority: "low", dueAt: "2026-10-16" },
+		repaired: "- [ ] Report 🔽 📅 2026-10-16 🔁 every week on Friday",
+		stranded: ["⏫", "📅 2026-10-09"],
+	},
+];
 
 export const RESAVED_SPLIT_RULES: ResavedSplitRule[] = [
 	{
@@ -79,7 +199,8 @@ export const RESAVED_SPLIT_RULES: ResavedSplitRule[] = [
 		name: "high priority, set again after the save",
 		line: `- [ ] Report ⏫  ${LEFT_START} ⏫ 📅 2026-10-16 🔁 DTSTART`,
 		read: { title: "Report", priority: "high", dueAt: "2026-10-16" },
-		repaired: "- [ ] Report ⏫ ⏫ 📅 2026-10-16 🔁 every week on Friday",
+		repaired: "- [ ] Report ⏫ 📅 2026-10-16 🔁 every week on Friday",
+		stranded: ["⏫"],
 	},
 	{
 		name: "high priority and every date, ticked",
@@ -141,6 +262,7 @@ export const RESAVED_SPLIT_RULES: ResavedSplitRule[] = [
 		repaired:
 			"- [ ] Report #work 🛫 2026-10-10 ⏫ 📅 2026-10-16 🔁 every week on Friday",
 	},
+	...STRANDED_FIELD_RULES,
 ];
 
 /** The fields of `task` a fixture's `read` names, for comparing. */

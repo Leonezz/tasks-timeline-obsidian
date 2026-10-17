@@ -10,7 +10,12 @@ import {
 	indexFile,
 	indexFileWithSplitRules,
 } from "../helpers/testHelpers";
-import { RESAVED_SPLIT_RULES, RULE_LINE } from "../fixtures/v080SplitRules";
+import {
+	readFieldsOf,
+	RESAVED_SPLIT_RULES,
+	RULE_LINE,
+	STRANDED_FIELD_RULES,
+} from "../fixtures/v080SplitRules";
 
 interface CapturedAppProps {
 	tasks: Task[];
@@ -394,6 +399,50 @@ describe("ObsidianAdaptor task handlers", () => {
 				"- [ ] Report ⏫ 📅 2026-10-16 🔁 every week on Friday\n",
 			);
 			expect(noticeSpy).not.toHaveBeenCalled();
+		});
+	});
+
+	/*
+	 * A field left in the title before the start date and written after it
+	 * too: the timeline shows the one after it, as v0.8.0 and Obsidian Tasks
+	 * read it, and a tick or rename stores that one, dropping the other.
+	 */
+	describe.each([
+		["with the rule's second line", indexFileWithSplitRules],
+		["without the rule's second line", indexFile],
+	])("with a field left in the title and written after the start date, indexed %s", (_index, index) => {
+		describe.each(STRANDED_FIELD_RULES)("$name", (fixture) => {
+			const content = `${fixture.line}\n${RULE_LINE}\n`;
+			const { title: _title, ...fields } = fixture.read;
+
+			it("shows the field after the start date and stores it on a tick", async () => {
+				const { app, file, previous } = await renderAdaptor(content, index);
+
+				expect(readFieldsOf(previous, fields)).toEqual(fields);
+				await mockAppProps!.onTaskUpdated(
+					{ ...previous, status: "done", completedAt: "2026-10-17" },
+					previous,
+				);
+
+				await expect(app.vault.cachedRead(file)).resolves.toBe(
+					`${fixture.repaired.replace("- [ ]", "- [x]")} ✅ 2026-10-17\n`,
+				);
+				expect(noticeSpy).not.toHaveBeenCalled();
+			});
+
+			it("stores it on a rename", async () => {
+				const { app, file, previous } = await renderAdaptor(content, index);
+
+				await mockAppProps!.onTaskUpdated(
+					{ ...previous, title: "Monthly summary" },
+					previous,
+				);
+
+				await expect(app.vault.cachedRead(file)).resolves.toBe(
+					`${fixture.repaired.replace("Report", "Monthly summary")}\n`,
+				);
+				expect(noticeSpy).not.toHaveBeenCalled();
+			});
 		});
 	});
 

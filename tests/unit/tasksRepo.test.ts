@@ -14,6 +14,7 @@ import {
 	readFieldsOf,
 	RESAVED_SPLIT_RULES,
 	RULE_LINE,
+	STRANDED_FIELD_RULES,
 	type ResavedSplitRule,
 } from "../fixtures/v080SplitRules";
 
@@ -1271,6 +1272,63 @@ describe("ObsidianTasksRepo with a rule v0.8.0 split over two lines", () => {
 					isRecurring: true,
 					recurringInterval: "every week on Friday",
 				});
+			});
+		});
+	});
+
+	/*
+	 * A field left in the title before the start date and written after it
+	 * too: the task reads as v0.8.0 and Obsidian Tasks read it (the field
+	 * after the start date), whether or not Obsidian indexed the rule's
+	 * second line, and every edit stores that field and drops the other.
+	 */
+	describe.each([
+		["with the rule's second line", indexFileWithSplitRules],
+		["without the rule's second line", indexFile],
+	])("a field left in the title and written after the start date, indexed %s", (_index, index) => {
+		describe.each(STRANDED_FIELD_RULES)("$name", (fixture) => {
+			const { title: _title, ...fields } = fixture.read;
+
+			function createStranded() {
+				const content = `${fixture.line}\n${RULE_LINE}\n- [ ] Next\n`;
+				const created = createRepo(content);
+				index(created.app, "Tasks.md", content);
+				return created;
+			}
+
+			it("reads the field written after the start date", async () => {
+				const { repo } = createStranded();
+
+				const [task] = await repo.loadTasks();
+
+				expect(readFieldsOf(task!, fields)).toEqual(fields);
+			});
+
+			it.each([
+				[
+					"a tick",
+					{ status: "done", completedAt: "2026-10-18" } as Partial<Task>,
+					(line: string) => `${line.replace("- [ ]", "- [x]")} ✅ 2026-10-18`,
+				],
+				[
+					"a rename",
+					{ title: "Monthly summary" } as Partial<Task>,
+					(line: string) => line.replace("Report", "Monthly summary"),
+				],
+				[
+					"a reschedule",
+					{ dueAt: "2026-10-23" } as Partial<Task>,
+					(line: string) => line.replace("📅 2026-10-16", "📅 2026-10-23"),
+				],
+			])("stores %s on the joined line, without the field left in the title", async (_edit, changes, expected) => {
+				const { app, file, repo } = createStranded();
+				const [task] = await repo.loadTasks();
+
+				await repo.updateTask({ ...task!, ...changes });
+
+				await expect(app.vault.cachedRead(file)).resolves.toBe(
+					`${expected(fixture.repaired)}\n- [ ] Next\n`,
+				);
 			});
 		});
 	});

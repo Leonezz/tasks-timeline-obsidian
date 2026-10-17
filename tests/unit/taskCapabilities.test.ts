@@ -22,6 +22,7 @@ import {
 	LEFT_START,
 	RESAVED_SPLIT_RULES,
 	RULE_LINE,
+	STRANDED_FIELD_RULES,
 } from "../fixtures/v080SplitRules";
 
 function createMcpCapabilities(content: string, blacklist = "") {
@@ -742,6 +743,52 @@ describe("createObsidianCapabilityContext with a rule v0.8.0 split and saved aga
 			expect(task).toMatchObject({ title: fixture.read.title, priority });
 		},
 	);
+
+	/*
+	 * A field left in the title before the start date and written after it
+	 * too: query_tasks lists the one after it, as v0.8.0 and Obsidian Tasks
+	 * read it, and update_task stores that one, dropping the other.
+	 */
+	describe.each([
+		["with", indexFileWithSplitRules],
+		["without", indexFile],
+	])("a field left in the title and written after the start date, indexed %s the rule's second line", (_with, index) => {
+		it.each(
+			STRANDED_FIELD_RULES.flatMap((fixture) => [
+				[
+					fixture.name,
+					"a rename",
+					fixture,
+					{ title: "Monthly summary" },
+					fixture.repaired.replace("Report", "Monthly summary"),
+				] as const,
+				[
+					fixture.name,
+					"a reschedule",
+					fixture,
+					{ dueAt: "2026-10-23" },
+					fixture.repaired.replace("📅 2026-10-16", "📅 2026-10-23"),
+				] as const,
+			]),
+		)("%s: lists the field after the start date and stores it on %s", async (_name, _edit, fixture, args, line) => {
+			const { app, file, capabilities } = createResaved(fixture.line, index);
+			const [listedTask] = await listed(capabilities);
+			expect(listedTask).toMatchObject({
+				priority: fixture.read.priority ?? "medium",
+				dueAt: fixture.read.dueAt,
+			});
+
+			const { result } = await capabilities.executeTool("update_task", {
+				id: listedTask!.id,
+				...args,
+			});
+
+			expect(result).toMatchObject({ success: true });
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				`${line}\n- [ ] Next\n`,
+			);
+		});
+	});
 
 	it("refuses to complete an open task indexed without the rule's second line, with the manual fix", async () => {
 		const fixture = open.find((f) => f.read.priority === "low")!;

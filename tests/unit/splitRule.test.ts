@@ -5,7 +5,11 @@ import {
 	repairSplitRule,
 	splitRuleFix,
 } from "../../src/splitRule";
-import { LEFT_START, RULE_LINE } from "../fixtures/v080SplitRules";
+import {
+	LEFT_START,
+	RULE_LINE,
+	STRANDED_FIELD_RULES,
+} from "../fixtures/v080SplitRules";
 
 /** DTSTART as v0.8.0's editor wrote it: local midnight, in UTC. */
 const dtstart = (date: string) =>
@@ -198,6 +202,80 @@ describe("repairSplitRule on a line v0.8.0 saved again", () => {
 				`COUNT.*delete the "RRULE:" line below the task, remove "${left}" from the title, and replace "🔁 DTSTART"`,
 			),
 		);
+	});
+});
+
+/*
+ * A field v0.8.0 left in the title before the start date, with the same
+ * field written after it: v0.8.0 and Obsidian Tasks read the one after it
+ * (their parsers stop at the start date), so the joined line keeps that one
+ * and drops the one in the title, which it would otherwise read instead.
+ */
+describe("repairSplitRule with a field left in the title and written after the start date", () => {
+	it.each(STRANDED_FIELD_RULES)("keeps the field after the start date: $name", (fixture) => {
+		const repair = repairSplitRule(fixture.line, RULE_LINE);
+
+		expect(repair).toEqual({
+			original: "DTSTART",
+			rule: "every week on Friday",
+			titleFragment: LEFT_START,
+			strandedFields: fixture.stranded,
+			line: fixture.repaired,
+		});
+	});
+
+	it("names the fields to remove from the title in the manual fix", () => {
+		const fix = splitRuleFix(
+			`- [ ] Report ⏫ 📅 2026-10-09  ${LEFT_START} 🔽 📅 2026-10-16 🔁 DTSTART`,
+			RULE_LINE,
+		);
+
+		expect(fix).toContain(
+			`delete the "RRULE:" line below the task, remove "⏫", "📅 2026-10-09" and "${LEFT_START}" from the title, and replace "🔁 DTSTART" with "🔁 every week on Friday"`,
+		);
+	});
+
+	it("refuses a field before the start date the joined line would read in place of the one after it, saying so", () => {
+		const line = `- [ ] Report 📅 2026-10-09 notes  ${LEFT_START} 📅 2026-10-16 🔁 DTSTART`;
+
+		expect(() => repairSplitRule(line, RULE_LINE)).toThrow(
+			new RegExp(
+				`the title has another due date before "${LEFT_START}", which the joined line would read in place of the one after it.*Edit the note`,
+			),
+		);
+	});
+});
+
+describe("asReadFromRepairedLine with a priority left in the title and another after it", () => {
+	const LINE = `- [ ] Report ⏫  ${LEFT_START} 🔽 📅 2026-10-16 🔁 DTSTART`;
+	const repair = repairSplitRule(LINE, RULE_LINE)!;
+	const asRead: Task = parseTasksFormatItem({
+		id: "Tasks.md:0:0",
+		title: LINE.slice("- [ ] ".length),
+		status: "todo",
+		priority: "medium",
+		tags: [],
+	});
+
+	it("reads the priority after the start date, as v0.8.0 did", () => {
+		expect(asRead).toMatchObject({ title: `Report ⏫  ${LEFT_START}`, priority: "low" });
+
+		expect(asReadFromRepairedLine(asRead, LINE, repair)).toMatchObject({
+			title: "Report",
+			priority: "low",
+			dueAt: "2026-10-16",
+			recurringInterval: "every week on Friday",
+		});
+	});
+
+	it.each([
+		["a priority", { priority: "high" as const }, { title: "Report", priority: "high" }],
+		["a title with the start date", { title: `Weekly report ⏫  ${LEFT_START}` }, { title: "Weekly report", priority: "low" }],
+		["a title without the start date", { title: "Weekly report" }, { title: "Weekly report", priority: "low" }],
+	])("keeps an edit of %s", (_kind, edit, expected) => {
+		expect(
+			asReadFromRepairedLine({ ...asRead, ...edit }, LINE, repair),
+		).toMatchObject(expected);
 	});
 });
 

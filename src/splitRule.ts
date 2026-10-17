@@ -3,6 +3,7 @@ import {
 	parseTasksFormatItem,
 	Task,
 	TaskRegularExpressions,
+	TasksPrioritySymbolToLabel,
 } from "@tasks-timeline/components";
 import { DateTime } from "luxon";
 
@@ -26,6 +27,15 @@ import { DateTime } from "luxon";
  *   RRULE:FREQ=WEEKLY;INTERVAL=1
  *
  * That is joined the same way, with the start date taken out of the title.
+ *
+ * v0.8.0 wrote its fields after the title, so the fields it wrote before
+ * the start date stay in the title, and its parser, like Obsidian Tasks's,
+ * stops there: "- [ ] Report ⏫  :20261015T160000Z 📅 …" reads as medium
+ * priority. Joined, they read as fields again. When the line also has the
+ * same field after the start date (the user set the priority again in
+ * v0.8.0: "Report ⏫  :20261015T160000Z 🔽 📅 …"), v0.8.0 and Obsidian
+ * Tasks read the one after it, so the joined line keeps that one and drops
+ * the one left in the title.
  */
 
 /** The second line of a split rule (and a block id v0.8.0 wrote after it). */
@@ -52,6 +62,12 @@ export interface SplitRuleRepair {
 	line: string;
 	/** The start date v0.8.0 left in the title, which the line no longer has. */
 	titleFragment?: string;
+	/**
+	 * The fields left in the title right before {@link titleFragment} that
+	 * the line also has after it, as written, which the line no longer has:
+	 * v0.8.0 and Obsidian Tasks read the ones after it.
+	 */
+	strandedFields?: string[];
 }
 
 class RepairError extends Error {}
@@ -219,14 +235,197 @@ const untitledTask = (title: string): Task => ({
 const bodyOf = (taskLine: string): string =>
 	TaskRegularExpressions.taskRegex.exec(taskLine)?.[4] ?? "";
 
+/** A task field, by where a Task holds it (scheduledAt is in `extra`). */
+type FieldKey =
+	| "priority"
+	| "dueAt"
+	| "startAt"
+	| "scheduledAt"
+	| "createdAt"
+	| "completedAt"
+	| "cancelledAt"
+	| "recurringInterval"
+	| "onCompletion"
+	| "taskId"
+	| "dependsOn";
+
+const PRIORITY_SYMBOLS = Object.keys(TasksPrioritySymbolToLabel).join("");
+const TASKS = TaskRegularExpressions;
+
+/** Each field as written ("📅 2026-10-16"), and what an error calls it. */
+const LINE_FIELDS: readonly (readonly [FieldKey, string, string])[] = [
+	["priority", "priority", `[${PRIORITY_SYMBOLS}]\\uFE0F?`],
+	["dueAt", "due date", TASKS.dueDateRegex.source],
+	["startAt", "start date", TASKS.startDateRegex.source],
+	["scheduledAt", "scheduled date", TASKS.scheduledDateRegex.source],
+	["createdAt", "created date", TASKS.createDateRegex.source],
+	["completedAt", "done date", TASKS.doneDateRegex.source],
+	["cancelledAt", "cancelled date", TASKS.cancelledDateRegex.source],
+	["recurringInterval", "recurrence rule", TASKS.recurrenceRegex.source],
+	["onCompletion", "on-completion action", TASKS.onCompletionRegex.source],
+	["taskId", "id", TASKS.idRegex.source],
+	["dependsOn", "dependency", TASKS.dependsOnRegex.source],
+];
+
+/** Each field at the end of a text, with the spaces before it. */
+const FIELD_AT_END = LINE_FIELDS.map(([key, , source]) => ({
+	key,
+	pattern: new RegExp(`(?:^|\\s+)(${source})$`, "u"),
+}));
+const TAG_AT_END = /(?:^|\s+)#[^\s!@#$%^&*(),.?":{}|<>]+$/u;
+
+/** A field written on a line, and where it is with the spaces before it. */
+interface LineField {
+	key: FieldKey;
+	/** The field as written ("📅 2026-10-16"). */
+	text: string;
+	start: number;
+	end: number;
+}
+
+/**
+ * The fields `text` ends with, in line order, found as Obsidian Tasks finds
+ * fields: from the end, past tags, up to other text.
+ */
+function trailingFields(text: string): LineField[] {
+	const rest = text.trimEnd();
+	for (const { key, pattern } of FIELD_AT_END) {
+		const match = pattern.exec(rest);
+		if (match) {
+			const text = match[1] ?? "";
+			const field = { key, text, start: match.index, end: rest.length };
+			return [...trailingFields(rest.slice(0, match.index)), field];
+		}
+	}
+	const tag = TAG_AT_END.exec(rest);
+	return tag ? trailingFields(rest.slice(0, tag.index)) : [];
+}
+
+/** `text` without `fields` (found in it) and the spaces before each. */
+const withoutFields = (text: string, fields: readonly LineField[]): string =>
+	fields.reduceRight(
+		(rest, field) => rest.slice(0, field.start) + rest.slice(field.end),
+		text,
+	);
+
+const valueOf = (task: Task, key: FieldKey): unknown =>
+	key === "scheduledAt" ? task.extra?.["scheduledAt"] : task[key];
+
+/** `task` with the value `from` has for `key`. */
+const withValueOf = (task: Task, key: FieldKey, from: Task): Task => {
+	if (key !== "scheduledAt") {
+		return { ...task, [key]: from[key] };
+	}
+	const scheduledAt = from.extra?.["scheduledAt"];
+	return { ...task, extra: { ...task.extra, scheduledAt } };
+};
+
+/** Where `fragment` is in a text, with the spaces before it. */
+const fragmentPattern = (fragment: string): RegExp =>
+	new RegExp(`(?:^|\\s+)${escapeRegExp(fragment)}(?=\\s|$)`);
+
+/** Where a task line's rule `original` ("DTSTART…") starts. */
+const ruleStart = (taskLine: string, original: string): number =>
+	taskLine.indexOf(original, taskLine.indexOf("🔁"));
+
+/**
+ * The fields v0.8.0 left in the title right before the start date `left`
+ * (see the top of this file) that the line also has after it.
+ */
+interface StrandedFields {
+	/** Those fields, on the task line, in line order. */
+	fields: LineField[];
+	/** The fields after the start date, as v0.8.0 and Obsidian Tasks read them. */
+	after: Task;
+	/** Which fields the line has after the start date. */
+	afterKeys: ReadonlySet<FieldKey>;
+}
+
+function strandedFields(taskLine: string, left: string): StrandedFields {
+	const before = taskLine.slice(0, ruleStart(taskLine, "DTSTART"));
+	const fragment = fragmentPattern(left).exec(before);
+	if (!fragment) {
+		// The start date is after the rule (typed there), so no field
+		// v0.8.0 wrote is left before it.
+		return { fields: [], after: untitledTask(""), afterKeys: new Set() };
+	}
+	const afterText = taskLine
+		.slice(fragment.index + fragment[0].length)
+		.trimEnd()
+		.replace(TaskRegularExpressions.blockLinkRegex, "");
+	const afterKeys = new Set(
+		trailingFields(afterText).map((field) => field.key),
+	);
+	return {
+		fields: trailingFields(before.slice(0, fragment.index)).filter((field) =>
+			afterKeys.has(field.key),
+		),
+		after: parseTasksFormatItem(untitledTask(afterText.trim())),
+		afterKeys,
+	};
+}
+
+/**
+ * `task` with the fields the line has after the start date read from there
+ * (the rule aside, which is joined).
+ */
+const withFieldsAfterStart = (task: Task, stranded: StrandedFields): Task =>
+	[...stranded.afterKeys]
+		.filter((key) => key !== "recurringInterval")
+		.reduce((read, key) => withValueOf(read, key, stranded.after), task);
+
+/**
+ * `task`, as read from `taskLine`, with the fields the line has after the
+ * start date v0.8.0 left in its title read from there, as v0.8.0 and
+ * Obsidian Tasks read them: their parsers stop at the start date, while
+ * the library reads the first of a field written twice, which is one in
+ * the title when it is a date.
+ */
+function asReadAfterStart(task: Task, taskLine: string): Task {
+	const read = parseTasksFormatItem(untitledTask(bodyOf(taskLine)));
+	const left =
+		read.recurringInterval === "DTSTART" ? leftStartDate(read) : undefined;
+	return left ? withFieldsAfterStart(task, strandedFields(taskLine, left)) : task;
+}
+
+/**
+ * Checks that the joined line reads the fields after the start date as
+ * v0.8.0 and Obsidian Tasks read them: a field before the start date other
+ * than the ones right before it, which the line drops, would be read in
+ * place of the one after it.
+ */
+function checkReadsFieldsAfterStart(
+	line: string,
+	stranded: StrandedFields,
+	left: string,
+): void {
+	const joined = parseTasksFormatItem(untitledTask(bodyOf(line)));
+	const misread = LINE_FIELDS.find(
+		([key]) =>
+			key !== "recurringInterval" &&
+			stranded.afterKeys.has(key) &&
+			!same(valueOf(joined, key), valueOf(stranded.after, key)),
+	);
+	if (misread) {
+		throw new RepairError(
+			`the title has another ${misread[1]} before "${left}", which the joined line would read in place of the one after it`,
+		);
+	}
+}
+
 /**
  * Joins a rule v0.8.0 split over `taskLine` ("🔁 DTSTART:…") and the line
  * below it ("RRULE:…").
  *
+ * A field v0.8.0 left in the title right before the start date that the
+ * line also has after it is dropped: the joined line keeps the one after
+ * it, which v0.8.0 and Obsidian Tasks read.
+ *
  * @returns undefined when the lines hold no split rule
  * @throws when they do but the rule can't be written as Obsidian Tasks text
- * with the same dates (COUNT, a task date out of step with the rule), with
- * the manual fix
+ * with the same dates (COUNT, a task date out of step with the rule), or
+ * the joined line would read another field than the one after the start
+ * date (one written earlier in the title), with the manual fix
  */
 export function repairSplitRule(
 	taskLine: string,
@@ -237,13 +436,16 @@ export function repairSplitRule(
 	if (body === undefined || !ruleLine?.[1]) {
 		return undefined;
 	}
-	const read = parseTasksFormatItem(untitledTask(body));
-	const original = read.recurringInterval;
+	const parsed = parseTasksFormatItem(untitledTask(body));
+	const original = parsed.recurringInterval;
 	if (!original?.startsWith("DTSTART")) {
 		return undefined;
 	}
 	// A task v0.8.0 saved again: its start date is in the title.
-	const left = original === "DTSTART" ? leftStartDate(read) : undefined;
+	const left = original === "DTSTART" ? leftStartDate(parsed) : undefined;
+	const stranded = left ? strandedFields(taskLine, left) : undefined;
+	const strandedTexts = stranded?.fields.map((field) => field.text) ?? [];
+	const read = stranded ? withFieldsAfterStart(parsed, stranded) : parsed;
 	try {
 		if (original === "DTSTART" && !left) {
 			throw new RepairError(
@@ -259,36 +461,63 @@ export function repairSplitRule(
 		if (blockId && TaskRegularExpressions.blockLinkRegex.test(taskLine)) {
 			throw new RepairError("both lines end with a block id");
 		}
-		const at = taskLine.indexOf(original, taskLine.indexOf("🔁"));
+		const at = ruleStart(taskLine, original);
 		const before = taskLine.slice(0, at);
+		// The stranded fields are before the start date, so taking it out
+		// first leaves them where they were found.
+		const joinedBefore =
+			left && stranded
+				? withoutFields(withoutFragment(before, left), stranded.fields)
+				: before;
 		const line =
-			(left ? withoutFragment(before, left) : before) +
+			joinedBefore +
 			written +
 			taskLine.slice(at + original.length).trimEnd() +
 			blockId;
+		if (left && stranded) {
+			checkReadsFieldsAfterStart(line, stranded, left);
+		}
 		return {
 			original,
 			rule,
 			line,
 			...(startAt ? { startAt } : {}),
 			...(left ? { titleFragment: left } : {}),
+			...(strandedTexts.length > 0 ? { strandedFields: strandedTexts } : {}),
 		};
 	} catch (error) {
 		if (!(error instanceof RepairError)) throw error;
 		throw new UnrepairableRuleError(
-			`Cannot repair the recurrence rule v0.8.0 split over two lines ("🔁 ${original}" and "RRULE:${ruleLine[1]}"): ${error.message}. ${manualFix(original, left, 'the rule as Obsidian Tasks text, such as "🔁 every week"')}`,
+			`Cannot repair the recurrence rule v0.8.0 split over two lines ("🔁 ${original}" and "RRULE:${ruleLine[1]}"): ${error.message}. ${manualFix(original, left, strandedTexts, 'the rule as Obsidian Tasks text, such as "🔁 every week"')}`,
 		);
 	}
 }
 
-/** How to join a split rule by editing the note. */
+/** "a", "b" and "c". */
+const quotedList = (texts: readonly string[]): string => {
+	const quoted = texts.map((text) => `"${text}"`);
+	return quoted.length > 1
+		? `${quoted.slice(0, -1).join(", ")} and ${quoted[quoted.length - 1]}`
+		: quoted.join("");
+};
+
+/**
+ * How to join a split rule by editing the note, taking out of the title
+ * the start date v0.8.0 left there (`left`) and the fields before it the
+ * line also has after it (`stranded`).
+ */
 function manualFix(
 	original: string,
 	left: string | undefined,
+	stranded: readonly string[],
 	replacement: string,
 ): string {
-	const removeLeft = left ? `remove "${left}" from the title, ` : "";
-	return `Edit the note: delete the "RRULE:" line below the task, ${removeLeft}and replace "🔁 ${original}" with ${replacement}.`;
+	const leftovers = [...stranded, ...(left ? [left] : [])];
+	const removeLeftovers =
+		leftovers.length > 0
+			? `remove ${quotedList(leftovers)} from the title, `
+			: "";
+	return `Edit the note: delete the "RRULE:" line below the task, ${removeLeftovers}and replace "🔁 ${original}" with ${replacement}.`;
 }
 
 /**
@@ -316,7 +545,7 @@ export function splitRuleFix(
 	}
 	const rrule = RULE_LINE.exec(nextLine ?? "")?.[1] ?? "";
 	const start = repair.startAt ? ` 🛫 ${repair.startAt}` : "";
-	return `Cannot read the recurrence rule v0.8.0 split over two lines ("🔁 ${repair.original}" and "RRULE:${rrule}"): Obsidian indexed the task without the "RRULE:" line. ${manualFix(repair.original, repair.titleFragment, `"🔁 ${repair.rule}${start}"`)} Or change the task once (in the timeline or with update_task), which joins the two lines.`;
+	return `Cannot read the recurrence rule v0.8.0 split over two lines ("🔁 ${repair.original}" and "RRULE:${rrule}"): Obsidian indexed the task without the "RRULE:" line. ${manualFix(repair.original, repair.titleFragment, repair.strandedFields ?? [], `"🔁 ${repair.rule}${start}"`)} Or change the task once (in the timeline or with update_task), which joins the two lines.`;
 }
 
 /** Task fields a task line holds, other than its title and checkbox. */
@@ -333,26 +562,50 @@ function defined<T extends object>(record: T): T {
 }
 
 /**
+ * `title` without the start date v0.8.0 left in it and, right before that,
+ * the fields the joined line dropped (see
+ * {@link SplitRuleRepair.strandedFields}), while the title still has them.
+ */
+function withoutLeftovers(title: string, repair: SplitRuleRepair): string {
+	const fragment = repair.titleFragment
+		? fragmentPattern(repair.titleFragment).exec(title)
+		: null;
+	if (!fragment) {
+		return title.trim();
+	}
+	const stranded = new Set(repair.strandedFields ?? []);
+	const head = title.slice(0, fragment.index);
+	const kept = withoutFields(
+		head,
+		trailingFields(head).filter((field) => stranded.has(field.text)),
+	);
+	return (kept + title.slice(fragment.index + fragment[0].length)).trim();
+}
+
+/**
  * The task read from a line with a split rule, `splitLine`, and maybe edited
  * since, as it reads from the line the rule is joined into: with the joined
  * rule, without the start date v0.8.0 left in its title, and with what that
  * start date kept the line's parser from reading as fields (the priority,
- * dates or other fields v0.8.0 wrote before it) read as fields.
+ * dates or other fields v0.8.0 wrote before it) read as fields, except the
+ * ones the line also has after it, which the joined line drops.
  *
- * Each field the task still has as read from `splitLine` takes its value
- * from the joined line (or from the title, when the title still holds it,
- * e.g. after a rename), and each field the task changed keeps the change.
+ * Each field the task still has as read from `splitLine` (see
+ * {@link withJoinedSplitRule}) takes its value from the joined line (or
+ * from the title, when the title still holds it, e.g. after a rename), and
+ * each field the task changed keeps the change.
  */
 export function asReadFromRepairedLine(
 	task: Task,
 	splitLine: string,
 	repair: SplitRuleRepair,
 ): Task {
-	const splitRead = parseTasksFormatItem(untitledTask(bodyOf(splitLine)));
+	const splitRead = asReadAfterStart(
+		parseTasksFormatItem(untitledTask(bodyOf(splitLine))),
+		splitLine,
+	);
 	const lineRead = parseTasksFormatItem(untitledTask(bodyOf(repair.line)));
-	const shownTitle = repair.titleFragment
-		? withoutFragment(task.title, repair.titleFragment).trim()
-		: task.title;
+	const shownTitle = withoutLeftovers(task.title, repair);
 	// Fields still in the title, read as a title without them reads.
 	const typed = parseTasksFormatItem(untitledTask(shownTitle));
 	const untyped = parseTasksFormatItem(untitledTask(typed.title));
@@ -406,14 +659,20 @@ export function readWithRuleLine(rawText: string): boolean {
  * the agent and complete_task see the task the joined line holds. The note
  * changes only when the task is saved. A rule that can't be joined is left
  * as read: saving the task then fails with the manual fix.
+ *
+ * A task read without the rule's second line (Obsidian indexed it apart)
+ * keeps the line's title and rule, but a field v0.8.0 left in the title
+ * that the line also has after the start date reads as the one after it,
+ * as v0.8.0 and Obsidian Tasks read it, and as saving it joins the lines.
  */
 export function withJoinedSplitRule(task: Task): Task {
 	const [line = "", next] = (task.extra?.rawText ?? "").split("\n");
+	const read = asReadAfterStart(task, line);
 	try {
 		const repair = repairSplitRule(line, next);
-		return repair ? asReadFromRepairedLine(task, line, repair) : task;
+		return repair ? asReadFromRepairedLine(read, line, repair) : read;
 	} catch (error) {
 		console.warn(error);
-		return task;
+		return read;
 	}
 }

@@ -35,11 +35,11 @@ Version 0.3.0 and earlier also misread such a task: saving it again (ticking or 
 RRULE:FREQ=WEEKLY;INTERVAL=1
 ```
 
-That task is repaired the same way, and the start date is taken out of the title. A priority those versions wrote before the start date (`- [x] Report ⏫  :20261015T160000Z 📅 …`) is read as the task's priority, as are other fields there, and stays on the repaired line.
+That task is repaired the same way, and the start date is taken out of the title. A priority those versions wrote before the start date (`- [x] Report ⏫  :20261015T160000Z 📅 …`) is read as the task's priority, as are other fields there, and stays on the repaired line. When the line also has that field after the start date (`- [ ] Report ⏫  :20261015T160000Z 🔽 📅 …`, where the priority was changed after the save), the one after it counts, as in those versions and Obsidian Tasks: the task is low priority, and the repaired line drops the ⏫ left in the title.
 
 If Obsidian has indexed the task without its `RRULE:` line, completing it through MCP fails with the exact rule to write by hand; editing the task once repairs the line instead.
 
-A rule that can't be written as text with the same dates is refused with an error, and the note is left as it is: rules with `COUNT`, a task date before the rule's start or out of step with its interval, hourly rules, or a `🔁 DTSTART` whose start date is gone from the line. Repair those by hand: delete the `RRULE:` line, remove a start date left in the title (`:20261015T160000Z`), and replace `🔁 DTSTART…` with the rule as text, such as `🔁 every week`. A copy of such a task with `🔁 DTSTART` and no `RRULE:` line below has lost its rule altogether; completing it fails with an error until you write the rule by hand.
+A rule that can't be written as text with the same dates is refused with an error, and the note is left as it is: rules with `COUNT`, a task date before the rule's start or out of step with its interval, hourly rules, a `🔁 DTSTART` whose start date is gone from the line, or a field written earlier in the title (`Report 📅 2026-10-09 notes  :20261015T160000Z 📅 2026-10-16 …`) that the repaired line would read in place of the one after the start date. Repair those by hand: delete the `RRULE:` line, remove a start date left in the title (`:20261015T160000Z`) and any field there that the line also has after it, and replace `🔁 DTSTART…` with the rule as text, such as `🔁 every week`. A copy of such a task with `🔁 DTSTART` and no `RRULE:` line below has lost its rule altogether; completing it fails with an error until you write the rule by hand.
 
 ## AI and voice input
 
