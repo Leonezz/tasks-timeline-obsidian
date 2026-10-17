@@ -233,6 +233,10 @@ describe("ObsidianTasksRepo.addTask", () => {
 		["a Windows line break", "A\r\nB"],
 		["a carriage return", "A\rB"],
 		["task lines", "Buy groceries:\n- [ ] milk\n- [ ] eggs"],
+		// The line writer's patterns end a line at these too, so the text
+		// after one would be written twice on the line.
+		["a line separator (U+2028)", "Buy groceries:\u2028- [ ] milk"],
+		["a paragraph separator (U+2029)", "Buy groceries:\u2029- [ ] milk"],
 	])(
 		"rejects a title with %s before writing anything",
 		async (_kind, title) => {
@@ -392,11 +396,15 @@ describe("taskUpdateNeedsWrite", () => {
 });
 
 describe("ObsidianTasksRepo with a title that has a line break", () => {
-	it("refuses to write it onto the task's line and leaves the note", async () => {
-		const content = "- [ ] Draft\n- [ ] Next\n";
+	it.each([
+		["a line break", "Draft\n- [ ] Extra"],
+		["a line separator (U+2028)", "Draft\u2028- [ ] Extra"],
+		["a paragraph separator (U+2029)", "Draft\u2029- [ ] Extra"],
+	])("refuses to write %s onto the task's line and leaves the note", async (_kind, title) => {
+		const content = "- [ ] Draft 📅 2026-10-16\n- [ ] Next\n";
 		const { app, file, repo } = createRepo(content);
 		const [task] = await repo.loadTasks();
-		const renamed = { ...task!, title: "Draft\n- [ ] Extra" };
+		const renamed = { ...task!, title };
 
 		expect(() => taskUpdateNeedsWrite(renamed, task!)).toThrow(
 			/Cannot update task: the title has a line break/,

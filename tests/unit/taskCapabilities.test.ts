@@ -150,14 +150,18 @@ describe("createObsidianCapabilityContext create_task with Tasks syntax in the t
 });
 
 describe("createObsidianCapabilityContext create_task with a line break in the title (MCP)", () => {
-	it("refuses the task before writing anything", async () => {
+	it.each([
+		["a line break", "Buy groceries:\n- [ ] milk\n- [ ] eggs"],
+		["a line separator (U+2028)", "Buy groceries:\u2028- [ ] milk"],
+		["a paragraph separator (U+2029)", "Buy groceries:\u2029- [ ] milk"],
+	])("refuses a title with %s before writing anything", async (_kind, title) => {
 		const { app, file, capabilities } = createMcpCapabilities(
 			"- [ ] Existing\n",
 		);
 		const processSpy = jest.spyOn(app.vault, "process");
 
 		const { result } = await capabilities.executeTool("create_task", {
-			title: "Buy groceries:\n- [ ] milk\n- [ ] eggs",
+			title,
 		});
 
 		expect(result).not.toMatchObject({ success: true });
@@ -166,6 +170,27 @@ describe("createObsidianCapabilityContext create_task with a line break in the t
 		await expect(app.vault.cachedRead(file)).resolves.toBe(
 			"- [ ] Existing\n",
 		);
+	});
+});
+
+describe("createObsidianCapabilityContext update_task with a line break in the title (MCP)", () => {
+	it.each([
+		["a line break", "Water plants\n- [ ] dup"],
+		["a line separator (U+2028)", "Water plants\u2028- [ ] dup"],
+		["a paragraph separator (U+2029)", "Water plants\u2029- [ ] dup"],
+	])("refuses a title with %s and leaves the note", async (_kind, title) => {
+		const content = "- [ ] Water plants 📅 2026-10-16\n";
+		const { app, file, capabilities } = createMcpCapabilities(content);
+		const id = await listedId(capabilities, "Water plants");
+
+		const { result } = await capabilities.executeTool("update_task", {
+			id,
+			title,
+		});
+
+		expect(result).not.toMatchObject({ success: true });
+		expect(JSON.stringify(result)).toMatch(/the title has a line break/);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
 	});
 });
 

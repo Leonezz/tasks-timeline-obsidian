@@ -87,12 +87,21 @@ function unstorableChanges(task: Task, previous: Task): string[] {
 }
 
 /**
+ * Line breaks a title can't hold: \r and \n, and the line and paragraph
+ * separators (U+2028, U+2029), where the line writer's patterns (".")
+ * also end a line. NEL (U+0085) is not here: neither those patterns nor
+ * Obsidian end a line at it.
+ */
+const LINE_BREAK = /[\r\n\u2028\u2029]/;
+
+/**
  * Throws for a title with a line break: a task line holds one line, and the
  * text after the break would become lines of its own (extra tasks, if it
- * reads "- [ ] …"). Details go in the description.
+ * reads "- [ ] …"), or, after U+2028 or U+2029, be written twice on the
+ * line. Details go in the description.
  */
 function assertSingleLineTitle(task: Task, action: string): void {
-	if (/[\r\n]/.test(task.title)) {
+	if (LINE_BREAK.test(task.title)) {
 		throw new Error(
 			`Cannot ${action}: the title has a line break, and a task line can only hold one line. Put the title on one line and the rest in the description.`,
 		);

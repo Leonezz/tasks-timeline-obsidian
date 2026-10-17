@@ -13,6 +13,7 @@ import {
 
 interface CapturedAppProps {
 	tasks: Task[];
+	onTaskAdded: (task: Task) => Promise<Task>;
 	onTaskUpdated: (task: Task, previous: Task) => Promise<void>;
 	onTaskDeleted: (taskId: string, previous: Task) => Promise<void>;
 	recurrenceFormat?: string;
@@ -283,6 +284,43 @@ describe("ObsidianAdaptor task handlers", () => {
 			await expect(app.vault.cachedRead(file)).resolves.toBe(
 				"- [ ] Water plants 📅 2026-10-16\n",
 			);
+		});
+	});
+
+	describe("with a line break in the title", () => {
+		const TITLES: [string, string][] = [
+			["a line break", "Buy groceries:\n- [ ] milk"],
+			["a line separator (U+2028)", "Buy groceries:\u2028- [ ] milk"],
+			["a paragraph separator (U+2029)", "Buy groceries:\u2029- [ ] milk"],
+		];
+
+		it.each(TITLES)("refuses to add a task whose title has %s", async (_kind, title) => {
+			const { app, file, previous } = await renderAdaptor("- [ ] Pay rent\n");
+			const processSpy = jest.spyOn(app.vault, "process");
+
+			await expect(
+				mockAppProps!.onTaskAdded({
+					...previous,
+					id: "new-task",
+					title,
+					extra: undefined,
+				}),
+			).rejects.toThrow(/the title has a line break/);
+			expect(processSpy).not.toHaveBeenCalled();
+			expect(noticeSpy).toHaveBeenCalledWith(
+				expect.stringMatching(/the title has a line break/),
+			);
+			await expect(app.vault.cachedRead(file)).resolves.toBe("- [ ] Pay rent\n");
+		});
+
+		it.each(TITLES)("refuses to rename a task to a title with %s", async (_kind, title) => {
+			const content = "- [ ] Pay rent 📅 2026-10-16\n";
+			const { app, file, previous } = await renderAdaptor(content);
+
+			await expect(
+				mockAppProps!.onTaskUpdated({ ...previous, title }, previous),
+			).rejects.toThrow(/the title has a line break/);
+			await expect(app.vault.cachedRead(file)).resolves.toBe(content);
 		});
 	});
 
