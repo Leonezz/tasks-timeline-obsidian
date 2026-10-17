@@ -6,7 +6,11 @@ import {
 	taskUpdateNeedsWrite,
 } from "../../src/tasksRepo";
 import { App, TFile } from "../mocks/obsidian";
-import { indexFile, reindexAfterWrites } from "../helpers/testHelpers";
+import {
+	createListItems,
+	indexFile,
+	reindexAfterWrites,
+} from "../helpers/testHelpers";
 
 function createRepo(content: string) {
 	const app = new App();
@@ -531,6 +535,69 @@ describe("ObsidianTasksRepo multi-line tasks", () => {
 		);
 		await expect(app.vault.cachedRead(file)).resolves.toBe(edited);
 	});
+
+	it.each([
+		[
+			"an indented description line",
+			"- [ ] Keep\n- [ ] With notes\n\tDetails\n- [ ] After\n",
+			"- [ ] Keep\n- [ ] With notes\n\tDetails\n\tAdded later\n- [ ] After\n",
+		],
+		[
+			"a first description line",
+			"- [ ] Keep\n- [ ] Plain\n- [ ] After\n",
+			"- [ ] Keep\n- [ ] Plain\n\tAdded later\n- [ ] After\n",
+		],
+		[
+			"a lazy continuation line",
+			"- [ ] Keep\n- [ ] Plain\n",
+			"- [ ] Keep\n- [ ] Plain\nadded later\n",
+		],
+		[
+			"a callout description line",
+			"> [!todo] Inbox\n> - [ ] Keep\n> - [ ] Quoted\n",
+			"> [!todo] Inbox\n> - [ ] Keep\n> - [ ] Quoted\n> \tAdded later\n",
+		],
+	])(
+		"refuses to delete a task that gained %s since it was read",
+		async (_kind, content, edited) => {
+			const { app, file, repo } = createRepo(content);
+			const tasks = await repo.loadTasks();
+			await app.vault.modify(file, edited);
+			indexFile(app, "Tasks.md", edited);
+
+			await expect(repo.deleteTask(tasks[1]!.id)).rejects.toThrow(
+				"changed since it was read",
+			);
+			await expect(app.vault.cachedRead(file)).resolves.toBe(edited);
+		},
+	);
+
+	it("deletes a task followed by a heading", async () => {
+		const { app, file, repo } = createRepo(
+			"- [ ] Keep\n- [ ] Delete me\n# Next section\n",
+		);
+		await repo.loadTasks();
+
+		await repo.deleteTask("Tasks.md:1:0");
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Keep\n# Next section\n",
+		);
+	});
+
+	it("deletes a task followed by a %% comment block", async () => {
+		const { app, file, repo } = createRepo(
+			"- [ ] Keep\n- [ ] Delete me\n%%\nhidden note\n%%\n",
+		);
+		const tasks = await repo.loadTasks();
+		expect(tasks[1]?.extra?.rawText).toBe("- [ ] Delete me");
+
+		await repo.deleteTask("Tasks.md:1:0");
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Keep\n%%\nhidden note\n%%\n",
+		);
+	});
 });
 
 describe("keepRecurrenceDroppedByModal", () => {
@@ -602,16 +669,42 @@ describe("ObsidianTasksRepo deleting a task with sub-tasks", () => {
 		["a description and a sub-task", "- [ ] Parent\n\tNotes\n\t- [ ] Child\n", "Tasks.md:0:0"],
 		["a plain sub-bullet", "- [ ] Parent\n\t- A note\n", "Tasks.md:0:0"],
 		["a blank line before the sub-task", "- [ ] Parent\n\n\t- [ ] Child\n", "Tasks.md:0:0"],
-		[
-			"a paragraph before the sub-task",
-			"- [ ] Parent\n\n\tSome notes\n\n\t- [ ] Child\n",
-			"Tasks.md:0:0",
-		],
 	])("refuses when it has nested items (%s)", async (_kind, content, id) => {
 		const { app, file, repo } = createRepo(content);
 		await repo.loadTasks();
 
 		await expect(repo.deleteTask(id)).rejects.toThrow(
+			"Cannot delete task: it has sub-tasks or other nested items — delete or move them first.",
+		);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+
+	it("refuses when a paragraph comes before the sub-task", async () => {
+		const content = "- [ ] Parent\n\n\tSome notes\n\n\t- [ ] Child\n";
+		const { app, file, repo } = createRepo(content);
+		// Like Obsidian's index, the parent's item spans the indented
+		// paragraph after the blank line (see continuesItem in taskLine.ts).
+		const [parent, ...others] = createListItems(content);
+		const paragraphEnd =
+			content.indexOf("\tSome notes") + "\tSome notes".length;
+		app.metadataCache._setCache("Tasks.md", {
+			listItems: [
+				{
+					...parent!,
+					position: {
+						start: parent!.position.start,
+						end: { line: 2, col: "\tSome notes".length, offset: paragraphEnd },
+					},
+				},
+				...others,
+			],
+			sections: [],
+			links: [],
+			tags: [],
+		});
+		await repo.loadTasks();
+
+		await expect(repo.deleteTask("Tasks.md:0:0")).rejects.toThrow(
 			"Cannot delete task: it has sub-tasks or other nested items — delete or move them first.",
 		);
 		await expect(app.vault.cachedRead(file)).resolves.toBe(content);

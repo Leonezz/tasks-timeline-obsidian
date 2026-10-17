@@ -139,6 +139,12 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 		});
 	};
 
+	// Keep the repository's cache in step with the vault: a modified note is
+	// read only once Obsidian has re-indexed it, so it is never parsed with
+	// list item positions from before the change. Registered before the
+	// initial load.
+	useEffect(() => stableTasksRepo.current.watchVault(), []);
+
 	// Initial load
 	useEffect(() => {
 		void loadTasks();
@@ -167,9 +173,11 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 		});
 	}, [plugin, settingsRepo]);
 
-	// Listen to vault changes via metadataCache resolved event.
+	// Reload on vault changes via metadataCache resolved event.
 	// This fires after Obsidian has re-indexed a file's metadata,
 	// ensuring listItems are up-to-date when we reload tasks.
+	// Deletes and renames don't re-index, so they reload too. The
+	// repository's watcher invalidates the files involved.
 	useEffect(() => {
 		const reload = debounce(
 			() => {
@@ -190,26 +198,13 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 		const deleteRef = plugin.app.vault.on("delete", (file) => {
 			if (file.name.endsWith(".md")) {
 				console.debug("[TasksTimeline] vault delete:", file.path);
-				stableTasksRepo.current.invalidateFile(file.path);
 				reload();
 			}
 		});
 		const renameRef = plugin.app.vault.on("rename", (file) => {
 			if (file.name.endsWith(".md")) {
 				console.debug("[TasksTimeline] vault rename:", file.path);
-				stableTasksRepo.current.invalidateFile(file.path);
 				reload();
-			}
-		});
-
-		// Also invalidate file cache when vault modifies a file
-		const modifyRef = plugin.app.vault.on("modify", (file) => {
-			if (file.name.endsWith(".md")) {
-				console.debug(
-					"[TasksTimeline] vault modify (invalidate cache):",
-					file.path,
-				);
-				stableTasksRepo.current.invalidateFile(file.path);
 			}
 		});
 
@@ -217,13 +212,16 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			plugin.app.metadataCache.offref(resolvedRef);
 			plugin.app.vault.offref(deleteRef);
 			plugin.app.vault.offref(renameRef);
-			plugin.app.vault.offref(modifyRef);
 			reload.cancel();
 		};
 	}, [plugin]);
 
 	// The task's note changed after the timeline loaded it: reload so the
-	// user can retry on current data.
+	// user can retry on current data. The reload waits for Obsidian to
+	// re-index a note modified meanwhile (see watchVault), so the stale write
+	// does not leave the timeline showing the note parsed with old positions.
+	// It reloads now rather than on "resolved": a copy from before a reload
+	// is stale without the note changing, and then nothing gets re-indexed.
 	const refreshAfterStale = (error: unknown, task: Task) => {
 		if (!(error instanceof StaleTaskError)) return;
 		if (task.extra?.file) {
