@@ -2,9 +2,11 @@ import { taskToMarkdown, type Task } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "../../src/main";
 import { ObsidianTasksRepo, taskUpdateNeedsWrite } from "../../src/tasksRepo";
 import { App, TFile } from "../mocks/obsidian";
+import { DateTime } from "luxon";
 import {
 	createListItems,
 	indexFile,
+	indexFileWithSplitRules,
 	reindexAfterWrites,
 } from "../helpers/testHelpers";
 
@@ -943,5 +945,85 @@ describe("ObsidianTasksRepo with reminders", () => {
 		const { task } = await loadOnly(REMINDER);
 
 		expect(taskUpdateNeedsWrite({ ...task }, task)).toBe(false);
+	});
+});
+
+describe("ObsidianTasksRepo with a rule v0.8.0 split over two lines", () => {
+	/** DTSTART as v0.8.0's editor wrote it: local midnight, in UTC. */
+	const START = `DTSTART:${DateTime.fromISO("2026-10-16")
+		.toUTC()
+		.toFormat("yyyyMMdd'T'HHmmss'Z'")}`;
+	const SPLIT = `- [ ] Report 📅 2026-10-16 🔁 ${START}\nRRULE:FREQ=WEEKLY;INTERVAL=1\n- [ ] Next\n`;
+
+	function createSplitRepo(content: string) {
+		const created = createRepo(content);
+		indexFileWithSplitRules(created.app, "Tasks.md", content);
+		return created;
+	}
+
+	it("reads the joined rule", async () => {
+		const { repo } = createSplitRepo(SPLIT);
+
+		const [task] = await repo.loadTasks();
+
+		expect(task).toMatchObject({
+			title: "Report",
+			recurringInterval: "every week on Friday",
+			isRecurring: true,
+		});
+	});
+
+	it("leaves the note alone for an edit that changes nothing", async () => {
+		const { repo } = createSplitRepo(SPLIT);
+		const [task] = await repo.loadTasks();
+
+		expect(taskUpdateNeedsWrite({ ...task! }, task!)).toBe(false);
+	});
+
+	it("repairs the line when the task is saved", async () => {
+		const { app, file, repo } = createSplitRepo(SPLIT);
+		const [task] = await repo.loadTasks();
+		const done = { ...task!, status: "done" as const, completedAt: "2026-10-17" };
+
+		expect(taskUpdateNeedsWrite(done, task!)).toBe(true);
+		await repo.updateTask(done);
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [x] Report 📅 2026-10-16 🔁 every week on Friday ✅ 2026-10-17\n- [ ] Next\n",
+		);
+	});
+
+	it("keeps a rule the save changes", async () => {
+		const { app, file, repo } = createSplitRepo(SPLIT);
+		const [task] = await repo.loadTasks();
+
+		await repo.updateTask({ ...task!, recurringInterval: "every month" });
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Report 📅 2026-10-16 🔁 every month\n- [ ] Next\n",
+		);
+	});
+
+	it("repairs a line Obsidian indexed without the rule's second line", async () => {
+		const { app, file, repo } = createRepo(SPLIT);
+		const [task] = await repo.loadTasks();
+
+		await repo.updateTask({ ...task!, title: "Weekly report" });
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Weekly report 📅 2026-10-16 🔁 every week on Friday\n- [ ] Next\n",
+		);
+	});
+
+	it("refuses a rule it can't repair, with the manual fix, and leaves the note", async () => {
+		const content = `- [ ] Report 📅 2026-10-16 🔁 ${START}\nRRULE:FREQ=WEEKLY;COUNT=5\n`;
+		const { app, file, repo } = createSplitRepo(content);
+		const [task] = await repo.loadTasks();
+
+		expect(task?.recurringInterval).toBe(START);
+		await expect(
+			repo.updateTask({ ...task!, status: "done" }),
+		).rejects.toThrow(/COUNT.*delete the "RRULE:" line below the task/);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
 	});
 });

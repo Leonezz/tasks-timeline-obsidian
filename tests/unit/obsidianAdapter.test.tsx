@@ -4,7 +4,12 @@ import type TasksTimelineObsidianPlugin from "../../src/main";
 import { ObsidianAdaptor } from "../../src/obsidianAdapter";
 import { obsidianFetch } from "../../src/obsidianHttp";
 import * as obsidian from "../mocks/obsidian";
-import { editExternally, indexFile } from "../helpers/testHelpers";
+import { DateTime } from "luxon";
+import {
+	editExternally,
+	indexFile,
+	indexFileWithSplitRules,
+} from "../helpers/testHelpers";
 
 interface CapturedAppProps {
 	tasks: Task[];
@@ -31,10 +36,10 @@ jest.mock("../../src/obsidianDom", () => ({
 	getActiveDocument: () => document,
 }));
 
-async function renderAdaptor(content: string) {
+async function renderAdaptor(content: string, index = indexFile) {
 	const app = new obsidian.App();
 	app.vault._addFile("Tasks.md", content);
-	indexFile(app, "Tasks.md", content);
+	index(app, "Tasks.md", content);
 	const file = app.vault.getAbstractFileByPath("Tasks.md");
 	if (!(file instanceof obsidian.TFile)) {
 		throw new Error("Test file not created");
@@ -278,6 +283,44 @@ describe("ObsidianAdaptor task handlers", () => {
 			await expect(app.vault.cachedRead(file)).resolves.toBe(
 				"- [ ] Water plants 📅 2026-10-16\n",
 			);
+		});
+	});
+
+	describe("with a rule v0.8.0 split over two lines", () => {
+		const START = DateTime.fromISO("2026-10-16")
+			.toUTC()
+			.toFormat("yyyyMMdd'T'HHmmss'Z'");
+		const SPLIT = `- [ ] Report 📅 2026-10-16 🔁 DTSTART:${START}\nRRULE:FREQ=WEEKLY;INTERVAL=1\n`;
+
+		it("shows the joined rule and leaves the note alone on a no-op save", async () => {
+			const { app, file, previous } = await renderAdaptor(
+				SPLIT,
+				indexFileWithSplitRules,
+			);
+			const processSpy = jest.spyOn(app.vault, "process");
+
+			await mockAppProps!.onTaskUpdated({ ...previous }, previous);
+
+			expect(previous.recurringInterval).toBe("every week on Friday");
+			expect(processSpy).not.toHaveBeenCalled();
+			await expect(app.vault.cachedRead(file)).resolves.toBe(SPLIT);
+		});
+
+		it("repairs the line when the task is toggled", async () => {
+			const { app, file, previous } = await renderAdaptor(
+				SPLIT,
+				indexFileWithSplitRules,
+			);
+
+			await mockAppProps!.onTaskUpdated(
+				{ ...previous, status: "done", completedAt: "2026-10-17" },
+				previous,
+			);
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"- [x] Report 📅 2026-10-16 🔁 every week on Friday ✅ 2026-10-17\n",
+			);
+			expect(noticeSpy).not.toHaveBeenCalled();
 		});
 	});
 

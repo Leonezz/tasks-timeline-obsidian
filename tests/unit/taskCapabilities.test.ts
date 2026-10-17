@@ -8,9 +8,11 @@ import { SecurityManager } from "../../src/mcpSecurity";
 import { createObsidianCapabilityContext } from "../../src/taskCapabilities";
 import { taskLineVersion } from "../../src/taskLine";
 import { App, TFile } from "../mocks/obsidian";
+import { DateTime } from "luxon";
 import {
 	editExternally,
 	indexFile,
+	indexFileWithSplitRules,
 	reindexAfterWrites,
 } from "../helpers/testHelpers";
 
@@ -456,6 +458,33 @@ describe("createObsidianCapabilityContext with reminders (MCP)", () => {
 		// A reminder is for one occurrence, as the library treats ⏰.
 		expect(next).toMatch(/^- \[ \] Call mom .*📅 2026-10-23/);
 		expect(next).not.toContain("(@");
+	});
+});
+
+describe("createObsidianCapabilityContext with a rule v0.8.0 split over two lines (MCP)", () => {
+	it("completes the task, repairs its line and adds the next occurrence", async () => {
+		const start = DateTime.fromISO("2026-10-16")
+			.toUTC()
+			.toFormat("yyyyMMdd'T'HHmmss'Z'");
+		const content = `- [ ] Report 📅 2026-10-16 🔁 DTSTART:${start}\nRRULE:FREQ=WEEKLY;INTERVAL=1\n`;
+		const { app, file, capabilities } = createMcpCapabilities(content);
+		indexFileWithSplitRules(app, "Tasks.md", content);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: await listedId(capabilities, "Report"),
+		});
+
+		expect(result).toMatchObject({ success: true });
+		const lines = (await app.vault.cachedRead(file)).split("\n");
+		expect(lines).toEqual([
+			expect.stringMatching(
+				/^- \[x\] Report 📅 2026-10-16 🔁 every week on Friday ✅ \d{4}-\d{2}-\d{2}$/,
+			),
+			expect.stringMatching(
+				/^- \[ \] Report 📅 2026-10-23 ➕ \d{4}-\d{2}-\d{2} 🔁 every week on Friday$/,
+			),
+			"",
+		]);
 	});
 });
 

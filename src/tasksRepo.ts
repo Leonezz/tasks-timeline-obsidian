@@ -20,6 +20,11 @@ import TasksTimelineObsidianPlugin from "./main";
 import { Link } from "./link";
 import { withNotesForNewLine, writeTaskOnLine } from "./lineWriter";
 import {
+	repairSplitRule,
+	withJoinedSplitRule,
+	withRepairedRule,
+} from "./splitRule";
+import {
 	filePathOfTaskId,
 	hasNestedItems,
 	isSameTaskLine,
@@ -110,7 +115,15 @@ export function taskUpdateNeedsWrite(task: Task, previous: Task): boolean {
 	if (!rawText) {
 		return true;
 	}
-	return writeTaskOnLine(task, rawText) !== writeTaskOnLine(previous, rawText);
+	// Compared on the line a rule split by v0.8.0 is repaired to, so a no-op
+	// edit leaves such a line alone (writeTaskLine repairs it on a change).
+	const [line = "", next, ...below] = rawText.split("\n");
+	const repair = repairSplitRule(line, next);
+	const text = repair ? [repair.line, ...below].join("\n") : rawText;
+	return (
+		writeTaskOnLine(withRepairedRule(task, repair), text) !==
+		writeTaskOnLine(withRepairedRule(previous, repair), text)
+	);
 }
 
 /**
@@ -338,6 +351,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 
 		const processedTasks = tasks
 			.map(parseTasksFormatItem)
+			.map(withJoinedSplitRule)
 			.map(parseDataViewFormatItem)
 			.map(dailyNoteTaskParser())
 			.map(remainderParser)
@@ -534,7 +548,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 		}
 		const position = snapshot?.position || task.extra?.position;
 
-		const outcome: { writtenLine?: string } = {};
+		const outcome: { writtenLine?: string; joinedLine?: string } = {};
 		await this.plugin.app.vault.process(file, (content) => {
 			const lines = content.split("\n");
 			const lineIndex = locateTaskLine(lines, expectedLine, position);
@@ -542,12 +556,20 @@ export class ObsidianTasksRepo implements TaskRepository {
 			if (originalLine === undefined) {
 				return content;
 			}
-			const newLine = writeTaskOnLine(task, originalLine);
+			// A rule v0.8.0 split over this line and the next is joined
+			// back into this one.
+			const nextLine = lines[lineIndex + 1];
+			const repair = repairSplitRule(originalLine, nextLine);
+			const newLine = writeTaskOnLine(
+				withRepairedRule(task, repair),
+				repair?.line ?? originalLine,
+			);
 			outcome.writtenLine = newLine;
+			outcome.joinedLine = repair ? nextLine : undefined;
 			return [
 				...lines.slice(0, lineIndex),
 				newLine,
-				...lines.slice(lineIndex + 1),
+				...lines.slice(lineIndex + (repair ? 2 : 1)),
 			].join("\n");
 		});
 
@@ -556,10 +578,16 @@ export class ObsidianTasksRepo implements TaskRepository {
 		}
 		// Remember the written line so a follow-up update of the same task
 		// (e.g. leaving inline edit mode) still matches before the next load.
-		// Its description lines below were left as they were.
+		// Its description lines below were left as they were, except the
+		// line of a rule joined into it.
+		const [, ...below] = expectedLine.split("\n");
+		const joined =
+			outcome.joinedLine !== undefined &&
+			below[0] !== undefined &&
+			isSameTaskLine(below[0], outcome.joinedLine);
 		const storedText = [
 			storedLineText(outcome.writtenLine, position),
-			...expectedLine.split("\n").slice(1),
+			...(joined ? below.slice(1) : below),
 		].join("\n");
 		this.taskCache.set(task.id, {
 			file: filePath,
