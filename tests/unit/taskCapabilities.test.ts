@@ -1,10 +1,12 @@
 import {
 	createCapabilities,
 	type Capabilities,
+	type CapabilityContext,
 } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "../../src/main";
 import { SecurityManager } from "../../src/mcpSecurity";
 import { createObsidianCapabilityContext } from "../../src/taskCapabilities";
+import { taskLineVersion } from "../../src/taskLine";
 import { App, TFile } from "../mocks/obsidian";
 import {
 	editExternally,
@@ -38,6 +40,19 @@ function createMcpCapabilities(content: string, blacklist = "") {
 	return { app, file, ctx, capabilities: createCapabilities(ctx) };
 }
 
+/** The id query_tasks lists for the task titled `title`, as a client gets it. */
+async function listedId(
+	capabilities: Capabilities,
+	title: string,
+): Promise<string> {
+	const { result } = await capabilities.executeTool("query_tasks", {});
+	const task = (result as { tasks: { id: string; title: string }[] }).tasks.find(
+		(t) => t.title === title,
+	);
+	if (!task) throw new Error(`No task titled ${title}`);
+	return task.id;
+}
+
 describe("createObsidianCapabilityContext (MCP)", () => {
 	it("skips confirmation because it is headless", () => {
 		const { ctx } = createMcpCapabilities("- [ ] Existing\n");
@@ -52,7 +67,7 @@ describe("createObsidianCapabilityContext (MCP)", () => {
 		);
 
 		const { result } = await capabilities.executeTool("delete_task", {
-			id: "Tasks.md:1:0",
+			id: await listedId(capabilities, "Delete me"),
 		});
 
 		expect(result).toMatchObject({ success: true });
@@ -65,8 +80,9 @@ describe("createObsidianCapabilityContext (MCP)", () => {
 			"tag:#private",
 		);
 
+		// Listings hide the task, so a client could only guess its id.
 		const { result } = await capabilities.executeTool("delete_task", {
-			id: "Tasks.md:1:0",
+			id: `Tasks.md:1:0~${taskLineVersion("- [ ] Secret #private")}`,
 		});
 
 		// The security manager hides the task, so the tool cannot find it.
@@ -86,11 +102,11 @@ describe("createObsidianCapabilityContext (MCP)", () => {
 		});
 		expect(created.result).toMatchObject({
 			success: true,
-			id: "Tasks.md:1:0",
+			id: expect.stringMatching(/^Tasks\.md:1:0~/),
 		});
 
 		const updated = await capabilities.executeTool("update_task", {
-			id: "Tasks.md:1:0",
+			id: (created.result as { id: string }).id,
 			title: "Renamed by agent",
 		});
 
@@ -125,9 +141,12 @@ describe("createObsidianCapabilityContext keeps task data current (MCP)", () => 
 		await editExternally(app, "Tasks.md", `${DONE}\n${NEXT}\n`);
 
 		expect(await queryTasks(capabilities)).toEqual([
-			expect.objectContaining({ id: "Tasks.md:0:0", status: "done" }),
 			expect.objectContaining({
-				id: "Tasks.md:1:0",
+				id: expect.stringMatching(/^Tasks\.md:0:0~/),
+				status: "done",
+			}),
+			expect.objectContaining({
+				id: expect.stringMatching(/^Tasks\.md:1:0~/),
 				status: "todo",
 				dueAt: "2026-10-17",
 			}),
@@ -136,16 +155,16 @@ describe("createObsidianCapabilityContext keeps task data current (MCP)", () => 
 
 	it("refuses to complete a task the user already completed (next occurrence below)", async () => {
 		const { app, file, capabilities } = createMcpCapabilities(`${DUE}\n`);
-		await queryTasks(capabilities);
+		const id = await listedId(capabilities, "Water plants");
 		await editExternally(app, "Tasks.md", `${DONE}\n${NEXT}\n`);
 
 		const { result } = await capabilities.executeTool("complete_task", {
-			id: "Tasks.md:0:0",
+			id,
 		});
 
 		// Worded for the AI client, unlike the timeline's notice.
 		expect(result).toEqual({
-			error: "Task Tasks.md:0:0 changed since it was read — query tasks again.",
+			error: `Task ${id} changed since it was read — query tasks again.`,
 		});
 		await expect(app.vault.cachedRead(file)).resolves.toBe(
 			`${DONE}\n${NEXT}\n`,
@@ -154,11 +173,11 @@ describe("createObsidianCapabilityContext keeps task data current (MCP)", () => 
 
 	it("never overwrites the next occurrence the Tasks plugin wrote above (default)", async () => {
 		const { app, file, capabilities } = createMcpCapabilities(`${DUE}\n`);
-		await queryTasks(capabilities);
+		const id = await listedId(capabilities, "Water plants");
 		await editExternally(app, "Tasks.md", `${NEXT}\n${DONE}\n`);
 
 		const { result } = await capabilities.executeTool("complete_task", {
-			id: "Tasks.md:0:0",
+			id,
 		});
 
 		expect(result).toMatchObject({
@@ -173,10 +192,10 @@ describe("createObsidianCapabilityContext keeps task data current (MCP)", () => 
 		const { app, file, capabilities } = createMcpCapabilities(`${DUE}\n`);
 		await queryTasks(capabilities);
 		await editExternally(app, "Tasks.md", `${NEXT}\n${DONE}\n`);
-		await queryTasks(capabilities);
+		const [next] = await queryTasks(capabilities);
 
 		const { result } = await capabilities.executeTool("update_task", {
-			id: "Tasks.md:0:0",
+			id: next!.id,
 			priority: "high",
 		});
 
@@ -188,16 +207,16 @@ describe("createObsidianCapabilityContext keeps task data current (MCP)", () => 
 
 	it("reads back its own update_task", async () => {
 		const { capabilities } = createMcpCapabilities(`${DUE}\n`);
-		await queryTasks(capabilities);
+		const id = await listedId(capabilities, "Water plants");
 
 		await capabilities.executeTool("update_task", {
-			id: "Tasks.md:0:0",
+			id,
 			title: "Water the plants",
 		});
 
 		expect(await queryTasks(capabilities)).toEqual([
 			expect.objectContaining({
-				id: "Tasks.md:0:0",
+				id: expect.stringMatching(/^Tasks\.md:0:0~/),
 				title: "Water the plants",
 			}),
 		]);
@@ -205,14 +224,15 @@ describe("createObsidianCapabilityContext keeps task data current (MCP)", () => 
 
 	it("applies consecutive updates to the same task without a new query", async () => {
 		const { app, file, capabilities } = createMcpCapabilities(`${DUE}\n`);
-		await queryTasks(capabilities);
+		const id = await listedId(capabilities, "Water plants");
 
+		// Both calls use the id from the one listing.
 		await capabilities.executeTool("update_task", {
-			id: "Tasks.md:0:0",
+			id,
 			title: "Water the plants",
 		});
 		const { result } = await capabilities.executeTool("complete_task", {
-			id: "Tasks.md:0:0",
+			id,
 		});
 
 		expect(result).toMatchObject({ success: true });
@@ -255,7 +275,7 @@ describe("createObsidianCapabilityContext with a callout task (MCP)", () => {
 		const { app, file, capabilities } = createMcpCapabilities(CALLOUT);
 
 		const { result } = await capabilities.executeTool("complete_task", {
-			id: "Tasks.md:1:2",
+			id: await listedId(capabilities, "Quoted task"),
 		});
 
 		expect(result).toMatchObject({ success: true });
@@ -268,7 +288,7 @@ describe("createObsidianCapabilityContext with a callout task (MCP)", () => {
 		const { app, file, capabilities } = createMcpCapabilities(CALLOUT);
 
 		const { result } = await capabilities.executeTool("update_task", {
-			id: "Tasks.md:1:2",
+			id: await listedId(capabilities, "Quoted task"),
 			title: "Renamed",
 		});
 
@@ -282,7 +302,7 @@ describe("createObsidianCapabilityContext with a callout task (MCP)", () => {
 		const { app, file, capabilities } = createMcpCapabilities(CALLOUT);
 
 		const { result } = await capabilities.executeTool("delete_task", {
-			id: "Tasks.md:1:2",
+			id: await listedId(capabilities, "Quoted task"),
 		});
 
 		expect(result).toMatchObject({ success: true });
@@ -319,7 +339,7 @@ describe("createObsidianCapabilityContext recurrence (MCP)", () => {
 		);
 
 		const { result } = await capabilities.executeTool("update_task", {
-			id: "Tasks.md:0:0",
+			id: await listedId(capabilities, "Water plants"),
 			recurrence: "",
 		});
 
@@ -336,12 +356,158 @@ describe("createObsidianCapabilityContext with sub-tasks (MCP)", () => {
 		const { app, file, capabilities } = createMcpCapabilities(content);
 
 		const { result } = await capabilities.executeTool("delete_task", {
-			id: "Tasks.md:0:0",
+			id: await listedId(capabilities, "Parent"),
 		});
 
 		expect(result).toEqual({
 			error: "Cannot delete task: it has sub-tasks or other nested items — delete or move them first.",
 		});
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+});
+
+describe("createObsidianCapabilityContext keeps ids bound to what was read (MCP)", () => {
+	const WATER = "- [ ] Water plants 🔁 every day 📅 2026-10-16";
+	const DONE = "- [x] Water plants 🔁 every day 📅 2026-10-16 ✅ 2026-10-16";
+	const NEXT = "- [ ] Water plants 🔁 every day 📅 2026-10-17";
+	const BEFORE = `${WATER}\n- [ ] Pay rent\n`;
+	// The user completes Water plants; the Tasks plugin writes NEXT above it,
+	// so "Pay rent" moves down and its old line now holds the done task.
+	const AFTER = `${NEXT}\n${DONE}\n- [ ] Pay rent\n`;
+
+	type Read = (
+		capabilities: Capabilities,
+		ctx: CapabilityContext,
+	) => Promise<unknown>;
+	const resource = (capabilities: Capabilities, uri: string) => {
+		const spec = capabilities.resources.find((r) => r.uri === uri);
+		if (!spec) throw new Error(`No resource ${uri}`);
+		return spec.read();
+	};
+	const reads: [string, Read][] = [
+		["get_task_stats", (c) => c.executeTool("get_task_stats", {})],
+		["get_today_plan", (c) => c.executeTool("get_today_plan", {})],
+		[
+			"a filtered query_tasks",
+			(c) => c.executeTool("query_tasks", { status: "done" }),
+		],
+		["tasks://all", (c) => resource(c, "tasks://all")],
+		["tasks://stats", (c) => resource(c, "tasks://stats")],
+		[
+			"a prompt",
+			async (c) => {
+				const prompt = c.prompts.find((p) => p.name === "plan_my_day");
+				if (!prompt) throw new Error("No plan_my_day prompt");
+				return prompt.render({});
+			},
+		],
+		[
+			"a second MCP session's query",
+			(_c, ctx) => createCapabilities(ctx).executeTool("query_tasks", {}),
+		],
+	];
+
+	it.each(reads)(
+		"refuses to delete with an id re-bound by %s",
+		async (_read, read) => {
+			const { app, file, ctx, capabilities } = createMcpCapabilities(BEFORE);
+			const payRent = await listedId(capabilities, "Pay rent");
+			await editExternally(app, "Tasks.md", AFTER);
+			await read(capabilities, ctx);
+
+			const { result } = await capabilities.executeTool("delete_task", {
+				id: payRent,
+			});
+
+			expect(result).toMatchObject({
+				error: expect.stringMatching(/changed since it was read/),
+			});
+			await expect(app.vault.cachedRead(file)).resolves.toBe(AFTER);
+		},
+	);
+
+	it.each([
+		["update_task", { priority: "high" }],
+		["complete_task", {}],
+	] as const)(
+		"refuses %s with an id re-bound by another read",
+		async (tool, args) => {
+			const { app, file, capabilities } = createMcpCapabilities(BEFORE);
+			const payRent = await listedId(capabilities, "Pay rent");
+			await editExternally(app, "Tasks.md", AFTER);
+			await capabilities.executeTool("get_task_stats", {});
+
+			const { result } = await capabilities.executeTool(tool, {
+				id: payRent,
+				...args,
+			});
+
+			expect(result).toMatchObject({
+				error: expect.stringMatching(/changed since it was read/),
+			});
+			await expect(app.vault.cachedRead(file)).resolves.toBe(AFTER);
+		},
+	);
+
+	it("refuses an id that no listing issued", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(BEFORE);
+
+		const { result } = await capabilities.executeTool("delete_task", {
+			id: "Tasks.md:1:0",
+		});
+
+		expect(result).toEqual({
+			error: "Unknown task id Tasks.md:1:0: use an id from query_tasks or a tasks:// resource.",
+		});
+		await expect(app.vault.cachedRead(file)).resolves.toBe(BEFORE);
+	});
+
+	it("reads a task through tasks://{taskId} with a listed id", async () => {
+		const { capabilities } = createMcpCapabilities(BEFORE);
+		const payRent = await listedId(capabilities, "Pay rent");
+		const byId = capabilities.resources.find((r) => r.name === "task-by-id");
+
+		const content = await byId!.read({ taskId: payRent });
+
+		expect(JSON.stringify(content)).toContain("Pay rent");
+	});
+
+	it("acts on the task with the id a new listing gives it", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(BEFORE);
+		await listedId(capabilities, "Pay rent");
+		await editExternally(app, "Tasks.md", AFTER);
+		const payRent = await listedId(capabilities, "Pay rent");
+
+		const { result } = await capabilities.executeTool("delete_task", {
+			id: payRent,
+		});
+
+		expect(result).toMatchObject({ success: true, title: "Pay rent" });
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			`${NEXT}\n${DONE}\n`,
+		);
+	});
+});
+
+describe("createObsidianCapabilityContext with changes the line cannot store (MCP)", () => {
+	it.each([
+		["a description", { description: "Bank transfer" }, /description cannot be stored/],
+		["a category", { category: "Other.md" }, /category cannot be stored/],
+		[
+			"a rename with a description",
+			{ title: "Pay the rent", description: "Bank transfer" },
+			/description cannot be stored/,
+		],
+	] as const)("refuses update_task with %s", async (_change, args, message) => {
+		const content = "- [ ] Pay rent\n";
+		const { app, file, capabilities } = createMcpCapabilities(content);
+
+		const { result } = await capabilities.executeTool("update_task", {
+			id: await listedId(capabilities, "Pay rent"),
+			...args,
+		});
+
+		expect(result).toMatchObject({ error: expect.stringMatching(message) });
 		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
 	});
 });

@@ -5,9 +5,16 @@ import type TasksTimelineObsidianPlugin from "../../src/main";
 import { DEFAULT_SETTINGS, TasksTimelineSettingTab } from "../../src/settings";
 import * as obsidian from "../mocks/obsidian";
 
+interface McpTabProps {
+	onToggle: (value: boolean) => Promise<void>;
+	onPortChange: (port: number) => Promise<void>;
+	onBlacklistChange: (value: string) => Promise<void>;
+}
+
 interface CapturedSettingsPageProps {
 	settings: AppSettings;
 	onUpdateSettings: (settings: AppSettings) => void;
+	customTabs: { content: { props: McpTabProps } }[];
 }
 
 let mockPageProps: CapturedSettingsPageProps | undefined;
@@ -52,8 +59,11 @@ function createTab(saveSettings: jest.Mock<Promise<void>, []>) {
 		settings: {
 			...DEFAULT_SETTINGS,
 			appSetting: withTheme("light"),
+			mcpServer: { ...DEFAULT_SETTINGS.mcpServer },
 		},
 		saveSettings,
+		updateSecurityBlacklist: jest.fn(),
+		restartMcpServer: jest.fn<Promise<void>, []>().mockResolvedValue(),
 		bus: { on: () => () => undefined, emit: jest.fn() },
 	} as unknown as TasksTimelineObsidianPlugin;
 	const tab = new TasksTimelineSettingTab(
@@ -121,6 +131,59 @@ describe("TasksTimelineSettingTab", () => {
 
 		expect(noticeSpy).toHaveBeenCalledTimes(2);
 		act(() => tab.hide());
+	});
+
+	describe("MCP server settings", () => {
+		const mcpTab = () => mockPageProps!.customTabs[0]!.content.props;
+		const failingSave = () =>
+			jest.fn<Promise<void>, []>().mockRejectedValue(new Error("disk full"));
+
+		it("applies a blacklist to the running server even when saving fails", async () => {
+			const { tab, plugin } = createTab(failingSave());
+			act(() => tab.display());
+
+			await act(() => mcpTab().onBlacklistChange("tag:#private"));
+
+			expect(plugin.updateSecurityBlacklist).toHaveBeenCalledWith(
+				"tag:#private",
+			);
+			expect(noticeSpy).toHaveBeenCalledWith(
+				"Failed to save settings: disk full",
+			);
+			act(() => tab.hide());
+		});
+
+		it("reports a failed save of a server setting", async () => {
+			const { tab, plugin } = createTab(failingSave());
+			act(() => tab.display());
+
+			await act(() => mcpTab().onPortChange(28000));
+
+			expect(plugin.settings.mcpServer.port).toBe(28000);
+			expect(noticeSpy).toHaveBeenCalledWith(
+				"Failed to save settings: disk full",
+			);
+			act(() => tab.hide());
+		});
+
+		it("restarts the server when saving fails, and reports a failed restart", async () => {
+			const { tab, plugin } = createTab(failingSave());
+			jest.mocked(plugin.restartMcpServer).mockRejectedValue(
+				new Error("port in use"),
+			);
+			act(() => tab.display());
+
+			await act(() => mcpTab().onToggle(true));
+
+			expect(plugin.restartMcpServer).toHaveBeenCalled();
+			expect(noticeSpy).toHaveBeenCalledWith(
+				"Failed to save settings: disk full",
+			);
+			expect(noticeSpy).toHaveBeenCalledWith(
+				"Failed to restart the agent server: port in use",
+			);
+			act(() => tab.hide());
+		});
 	});
 
 	it("keeps saved settings when Try Again remounts after a crash", async () => {

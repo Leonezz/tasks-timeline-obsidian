@@ -50,6 +50,36 @@ const REINDEX_TIMEOUT_MS = 3000;
  */
 const LINE_UNSTORABLE_FIELDS = ["description", "category"] as const;
 
+const tagKey = (name: string) => name.replace(/^#/, "");
+
+function frontmatterTagsOf(task: Task): string[] {
+	try {
+		const parsed: unknown = JSON.parse(task.extra?.frontmatterTags ?? "[]");
+		return Array.isArray(parsed)
+			? parsed.filter((tag): tag is string => typeof tag === "string")
+			: [];
+	} catch (error) {
+		console.warn("Failed to parse frontmatter tags", error);
+		return [];
+	}
+}
+
+/**
+ * Changes the vault line cannot store: description and category, and
+ * removing a tag the task gets from its note's frontmatter (the line would
+ * stay the same and the tag would come back on the next read).
+ */
+function unstorableChanges(task: Task, previous: Task): string[] {
+	const fields = LINE_UNSTORABLE_FIELDS.filter(
+		(field) => (task[field] ?? "").trim() !== (previous[field] ?? "").trim(),
+	);
+	const kept = new Set(task.tags.map((tag) => tagKey(tag.name)));
+	const removedFrontmatterTags = frontmatterTagsOf(previous)
+		.filter((tag) => !kept.has(tagKey(tag)))
+		.map((tag) => `frontmatter tag ${tag}`);
+	return [...fields, ...removedFrontmatterTags];
+}
+
 /**
  * Decides whether an edit of a vault task needs a write.
  *
@@ -59,26 +89,27 @@ const LINE_UNSTORABLE_FIELDS = ["description", "category"] as const;
  *
  * @returns false when nothing changed; true when the serialized line changes,
  * or when the stored line is unknown (`updateTask` then locates it itself).
- * @throws when the only changes are to fields the vault line cannot store.
+ * @throws when the edit changes anything the vault line cannot store, even
+ * alongside changes it can: saving only part of an edit would drop the rest
+ * without a word.
  */
 export function taskUpdateNeedsWrite(task: Task, previous: Task): boolean {
+	const unstorable = unstorableChanges(task, previous);
+	if (unstorable.length > 0) {
+		const frontmatterHint = unstorable.some((change) =>
+			change.startsWith("frontmatter tag"),
+		)
+			? " Frontmatter tags are changed in the note's frontmatter."
+			: "";
+		throw new Error(
+			`Cannot update task: ${unstorable.join(" and ")} cannot be stored in the vault line. Only the task line (title, status, priority, dates, tags, recurrence) is saved.${frontmatterHint}`,
+		);
+	}
 	const rawText = previous.extra?.rawText;
 	if (!rawText) {
 		return true;
 	}
-	if (taskToMarkdown(task, rawText) !== taskToMarkdown(previous, rawText)) {
-		return true;
-	}
-
-	const unstorable = LINE_UNSTORABLE_FIELDS.filter(
-		(field) => (task[field] ?? "").trim() !== (previous[field] ?? "").trim(),
-	);
-	if (unstorable.length > 0) {
-		throw new Error(
-			`Cannot update task: ${unstorable.join(" and ")} cannot be stored in the vault line. Only the task line (title, status, priority, dates, tags, recurrence) is saved.`,
-		);
-	}
-	return false;
+	return taskToMarkdown(task, rawText) !== taskToMarkdown(previous, rawText);
 }
 
 /**

@@ -50,6 +50,22 @@ function blockLines(rawText: string): string[] {
 	return [first, ...(nested === -1 ? rest : rest.slice(0, nested))];
 }
 
+/**
+ * A short version of a task's line (FNV-1a over its content), carried in
+ * the ids handed to MCP clients so an id names the line it was issued for.
+ * Formatting the comparison ignores (quote prefix, indentation, trailing
+ * spaces) does not change it.
+ */
+export function taskLineVersion(rawText: string): string {
+	const [line = ""] = rawText.split("\n");
+	let hash = 0x811c9dc5;
+	for (const char of lineContent(line)) {
+		hash ^= char.codePointAt(0) ?? 0;
+		hash = Math.imul(hash, 0x01000193) >>> 0;
+	}
+	return hash.toString(36);
+}
+
 /** Whether two tasks have the same task line (descriptions aside). */
 export function isSameTaskLine(a: string, b: string): boolean {
 	const [lineA = ""] = a.split("\n");
@@ -235,6 +251,9 @@ function continuesItem(
  * lines end before `after`. Removing the task would leave them indented
  * under nothing, which Obsidian reads as a code block or paragraph text, so
  * they would drop off the timeline.
+ *
+ * Looks through everything indented under the task (blank lines and
+ * paragraphs included), up to the first line that is not.
  */
 export function hasNestedItems(
 	lines: readonly string[],
@@ -242,16 +261,14 @@ export function hasNestedItems(
 	after: number,
 ): boolean {
 	const task = lineShape(lines[taskLine] ?? "");
-	const next = lines
-		.slice(after)
-		.map(lineShape)
-		.find((shape) => shape.text.trim() !== "");
-	return (
-		next !== undefined &&
-		next.quoteDepth === task.quoteDepth &&
-		next.indent > task.indent &&
-		LIST_ITEM.test(next.text)
-	);
+	for (const shape of lines.slice(after).map(lineShape)) {
+		if (shape.text.trim() === "") continue;
+		if (shape.quoteDepth !== task.quoteDepth || shape.indent <= task.indent) {
+			return false;
+		}
+		if (LIST_ITEM.test(shape.text)) return true;
+	}
+	return false;
 }
 
 /** The task an id names changed since the id was handed out. */

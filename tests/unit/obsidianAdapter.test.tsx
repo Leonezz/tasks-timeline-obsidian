@@ -102,6 +102,21 @@ describe("ObsidianAdaptor task handlers", () => {
 		);
 	});
 
+	it("rejects a rename saved with a description instead of dropping the description", async () => {
+		const { app, file, previous } = await renderAdaptor("- [ ] Pay rent\n");
+
+		await expect(
+			mockAppProps!.onTaskUpdated(
+				{ ...previous, title: "Pay the rent", description: "Bank transfer" },
+				previous,
+			),
+		).rejects.toThrow(/description cannot be stored/);
+		expect(noticeSpy).toHaveBeenCalledWith(
+			expect.stringMatching(/^Failed to update task: .*description cannot be stored/),
+		);
+		await expect(app.vault.cachedRead(file)).resolves.toBe("- [ ] Pay rent\n");
+	});
+
 	it("writes a tag removal", async () => {
 		const { app, file, previous } = await renderAdaptor(
 			"- [ ] Pay rent #home\n",
