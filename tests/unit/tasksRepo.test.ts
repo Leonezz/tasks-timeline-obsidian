@@ -832,6 +832,12 @@ describe("ObsidianTasksRepo with Dataview inline fields", () => {
 			"- [x] Task 📅 2026-10-20 ✅ 2026-10-17 [[due:: 2026-10-25]]\n",
 		],
 		[
+			"changes a scheduled date in its Dataview field",
+			"- [ ] Task [[scheduled:: 2026-10-20]]\n",
+			{ extra: { scheduledAt: "2026-10-22" } },
+			"- [ ] Task [[scheduled:: 2026-10-22]]\n",
+		],
+		[
 			"removes a tag next to a Dataview field",
 			"- [ ] Pay #home rent [[due:: 2026-10-25]]\n",
 			{ tags: [] },
@@ -870,6 +876,18 @@ describe("ObsidianTasksRepo with Dataview inline fields", () => {
 			expect(taskUpdateNeedsWrite({ ...task }, task)).toBe(false);
 		},
 	);
+
+	it("refuses to change a Dataview field written twice, and leaves the note", async () => {
+		const content = "- [ ] Task [[due:: 2026-10-25]] [[due:: 2026-10-25]]\n";
+		const { app, file, repo, task } = await loadOnly(content);
+
+		await expect(
+			repo.updateTask({ ...task, dueAt: "2026-10-30" }),
+		).rejects.toThrow(
+			"Cannot change the Dataview field [[due:: 2026-10-25]]: it is more than once on the task line. Edit the line in the note.",
+		);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
 
 	it("reads its own write back with the same fields", async () => {
 		const { app, repo, task } = await loadOnly(IN_TITLE);
