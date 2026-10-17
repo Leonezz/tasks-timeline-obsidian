@@ -20,13 +20,17 @@ interface ObsidianAdaptorProps {
 	plugin: TasksTimelineObsidianPlugin;
 }
 
-const OBSIDIAN_AI_SYSTEM_PROMPT = `You are operating inside an Obsidian vault where the user's requests are often information for finding and manipulating todo items, not just plain conversation.
+export const OBSIDIAN_AI_SYSTEM_PROMPT = `You are operating inside an Obsidian vault where the user's requests are often information for finding and manipulating todo items, not just plain conversation.
 
 - Treat todo items as vault-backed markdown tasks. Each task belongs to the note file shown by its category/file path, so the note path is part of the task's meaning.
 - The user's wording may refer to a task indirectly through a note, project, meeting, daily note, tag, linked concept, or surrounding context in the vault. Use the available task query tools to find the relevant task candidates before updating, completing, cancelling, or deleting anything.
 - When creating a task, choose the target category/file path that best matches the note or project the user is talking about. If the destination note is unclear, ask a short clarification instead of guessing.
 - When changing existing tasks, preserve vault-specific metadata and unrelated task fields. Use task IDs returned by query results rather than inventing IDs or relying only on title text.
-- If multiple tasks could match the user's intent, ask the user to choose or narrow the scope before destructive or bulk changes.`;
+- If multiple tasks could match the user's intent, ask the user to choose or narrow the scope before destructive or bulk changes.
+- Tasks are Obsidian Tasks lines. Besides dates (🛫 start, ⏳ scheduled, 📅 due, ✅ done, ❌ cancelled, ➕ created), a line can hold 🏁 onCompletion ("keep" or "delete"), 🆔 taskId (the task's Obsidian Tasks id) and ⛔ dependsOn (the taskIds it waits for). A taskId is not the task id the tools take.
+- Text and links after a task's fields are in extra.lineNotes, not in the title; query_tasks text search does not look at them. Reminders (⏰ or "(@2026-10-16 09:00)") stay on the line and are not part of the title.
+- Recurrence rules are Obsidian Tasks text, such as "every week on Monday". They can't hold a start date (DTSTART): set the task's startAt instead. A 🔁 that runs straight into other text ("Standup 🔁 every day at 9:30") is part of the title, not a rule, and the task does not recur.
+- Dataview inline fields are written [[key:: value]]. Dates in due, scheduled, start, created and completion fields are the task's dates; the fields stay on the line, and changing such a date rewrites its field.`;
 
 /** The stale-id error tells AI clients to query again; users get this. */
 const STALE_TASK_IN_VIEW =
