@@ -179,33 +179,25 @@ describe("ObsidianAdaptor task handlers", () => {
 		});
 	});
 
-	describe("with a recurring task (components <= v0.8.0 edit modal)", () => {
+	describe("with a recurring task", () => {
 		const RECURRING = "- [ ] Water plants 📅 2026-10-16 🔁 every day\n";
 
-		// What v0.8.0's modal saves when its recurrence switch is untouched.
-		const savedByModal = (task: Task, changes: Partial<Task> = {}) => ({
-			...task,
-			...changes,
-			recurringInterval: undefined,
-		});
-
-		it("keeps 🔁 on a modal save that changes nothing", async () => {
+		it("leaves the line alone on an editor save that changes nothing", async () => {
 			const { app, file, previous } = await renderAdaptor(RECURRING);
 			const processSpy = jest.spyOn(app.vault, "process");
 
-			await mockAppProps!.onTaskUpdated(savedByModal(previous), previous);
+			// The editor returns the stored rule as it read it.
+			await mockAppProps!.onTaskUpdated({ ...previous }, previous);
 
 			expect(processSpy).not.toHaveBeenCalled();
 			await expect(app.vault.cachedRead(file)).resolves.toBe(RECURRING);
 		});
 
-		it("keeps 🔁 on a modal save that only changes tags", async () => {
+		it("keeps 🔁 on a save that only changes tags", async () => {
 			const { app, file, previous } = await renderAdaptor(RECURRING);
 
 			await mockAppProps!.onTaskUpdated(
-				savedByModal(previous, {
-					tags: [{ id: "#home", name: "#home" }],
-				}),
+				{ ...previous, tags: [{ id: "#home", name: "#home" }] },
 				previous,
 			);
 
@@ -214,23 +206,23 @@ describe("ObsidianAdaptor task handlers", () => {
 			);
 		});
 
-		it("keeps 🔁 on a modal save that only changes the description", async () => {
+		it("rejects a save that only changes the description", async () => {
 			const { app, file, previous } = await renderAdaptor(RECURRING);
 
 			await expect(
 				mockAppProps!.onTaskUpdated(
-					savedByModal(previous, { description: "Use rain water" }),
+					{ ...previous, description: "Use rain water" },
 					previous,
 				),
 			).rejects.toThrow(/description cannot be stored/);
 			await expect(app.vault.cachedRead(file)).resolves.toBe(RECURRING);
 		});
 
-		it("clears 🔁 when the modal's recurrence switch is turned off", async () => {
+		it("clears 🔁 when the editor's recurrence switch is turned off", async () => {
 			const { app, file, previous } = await renderAdaptor(RECURRING);
 
 			await mockAppProps!.onTaskUpdated(
-				savedByModal(previous, { isRecurring: false }),
+				{ ...previous, isRecurring: false, recurringInterval: undefined },
 				previous,
 			);
 
@@ -242,7 +234,7 @@ describe("ObsidianAdaptor task handlers", () => {
 		it("clears 🔁 when the in-app AI clears the recurrence", async () => {
 			const { app, file, previous } = await renderAdaptor(RECURRING);
 
-			// v0.8.0 update_task with recurrence "".
+			// update_task with recurrence "".
 			await mockAppProps!.onTaskUpdated(
 				{ ...previous, isRecurring: undefined, recurringInterval: undefined },
 				previous,
@@ -397,12 +389,8 @@ describe("ObsidianAdaptor task handlers", () => {
 		);
 		const current = mockAppProps!.tasks[0]!;
 
-		// v0.8.0's modal saves the copy with its recurrence switch untouched.
 		await expect(
-			mockAppProps!.onTaskUpdated(
-				{ ...editorCopy, status: "done", recurringInterval: undefined },
-				current,
-			),
+			mockAppProps!.onTaskUpdated({ ...editorCopy, status: "done" }, current),
 		).rejects.toThrow("changed since it was read");
 		expect(noticeSpy).toHaveBeenCalledWith(
 			"Failed to update task: this note changed in the editor; the timeline is refreshing — reopen the task and try again.",

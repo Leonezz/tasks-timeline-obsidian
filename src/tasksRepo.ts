@@ -112,30 +112,6 @@ export function taskUpdateNeedsWrite(task: Task, previous: Task): boolean {
 	return taskToMarkdown(task, rawText) !== taskToMarkdown(previous, rawText);
 }
 
-/**
- * Compatibility shim for @tasks-timeline/components <= v0.8.0, whose edit
- * modal saves `recurringInterval: undefined` unless its recurrence switch was
- * touched. Tasks read from the vault carry their 🔁 rule in
- * `recurringInterval` but never set `isRecurring`, so every modal save would
- * erase the rule from the note.
- *
- * Keeps the previous rule when the incoming task has none and no
- * `isRecurring` key at all, which only that untouched switch produces.
- * Explicit removal still clears it: the switch turned off sets
- * `isRecurring: false`, and the AI tools set the `isRecurring` key when they
- * clear a recurrence. Newer modals return the rule unchanged, so this then
- * does nothing.
- */
-export function keepRecurrenceDroppedByModal(task: Task, previous: Task): Task {
-	const dropped =
-		previous.recurringInterval !== undefined &&
-		task.recurringInterval === undefined &&
-		!("isRecurring" in task);
-	return dropped
-		? { ...task, recurringInterval: previous.recurringInterval }
-		: task;
-}
-
 export class ObsidianTasksRepo implements TaskRepository {
 	name: string = "Obsidian Notes";
 	plugin: TasksTimelineObsidianPlugin;

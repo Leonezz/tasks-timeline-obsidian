@@ -1,10 +1,6 @@
 import { taskToMarkdown, type Task } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "../../src/main";
-import {
-	keepRecurrenceDroppedByModal,
-	ObsidianTasksRepo,
-	taskUpdateNeedsWrite,
-} from "../../src/tasksRepo";
+import { ObsidianTasksRepo, taskUpdateNeedsWrite } from "../../src/tasksRepo";
 import { App, TFile } from "../mocks/obsidian";
 import {
 	createListItems,
@@ -186,11 +182,11 @@ describe("taskUpdateNeedsWrite", () => {
 		expect(taskUpdateNeedsWrite({ ...previous }, previous)).toBe(false);
 	});
 
-	it("skips a no-op edit without reformatting the line", async () => {
+	it("skips a no-op edit and leaves the line as written", async () => {
 		const line = "- [ ] #home Pay rent";
 		const previous = await loadOnlyTask(line);
-		// Serializing would move the leading tag to the end of the line.
-		expect(taskToMarkdown(previous, line)).not.toBe(line);
+		// The line is edited in place: the leading tag stays where it is.
+		expect(taskToMarkdown(previous, line)).toBe(line);
 
 		expect(taskUpdateNeedsWrite({ ...previous }, previous)).toBe(false);
 	});
@@ -597,47 +593,6 @@ describe("ObsidianTasksRepo multi-line tasks", () => {
 		await expect(app.vault.cachedRead(file)).resolves.toBe(
 			"- [ ] Keep\n%%\nhidden note\n%%\n",
 		);
-	});
-});
-
-describe("keepRecurrenceDroppedByModal", () => {
-	const previous: Task = {
-		id: "Tasks.md:0:0",
-		title: "Water plants",
-		status: "todo",
-		priority: "medium",
-		tags: [],
-		recurringInterval: "every day",
-	};
-
-	it("restores the rule a v0.8.0 modal save dropped", () => {
-		const saved = { ...previous, recurringInterval: undefined };
-
-		expect(keepRecurrenceDroppedByModal(saved, previous)).toEqual(previous);
-	});
-
-	it.each([
-		["the switch turned off", { isRecurring: false, recurringInterval: undefined }],
-		["the AI clearing it", { isRecurring: undefined, recurringInterval: undefined }],
-		["an empty rule", { recurringInterval: "" }],
-		["a null rule", { isRecurring: true, recurringInterval: null as unknown as string }],
-	])("leaves an explicit removal by %s alone", (_how, changes) => {
-		const saved = { ...previous, ...changes };
-
-		expect(keepRecurrenceDroppedByModal(saved, previous)).toBe(saved);
-	});
-
-	it("does nothing for a modal that returns the rule (components > v0.8.0)", () => {
-		const saved = { ...previous, isRecurring: true, title: "Water" };
-
-		expect(keepRecurrenceDroppedByModal(saved, previous)).toBe(saved);
-	});
-
-	it("does nothing for a task that was not recurring", () => {
-		const plain = { ...previous, recurringInterval: undefined };
-		const saved = { ...plain, title: "Water" };
-
-		expect(keepRecurrenceDroppedByModal(saved, plain)).toBe(saved);
 	});
 });
 

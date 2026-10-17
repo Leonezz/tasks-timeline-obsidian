@@ -13,11 +13,7 @@ import {
 	useState,
 } from "react";
 import { ObsidianSettingRepo } from "./settingsRepo";
-import {
-	keepRecurrenceDroppedByModal,
-	ObsidianTasksRepo,
-	taskUpdateNeedsWrite,
-} from "./tasksRepo";
+import { ObsidianTasksRepo, taskUpdateNeedsWrite } from "./tasksRepo";
 import { isSameTaskLine, StaleTaskError } from "./taskLine";
 import { ObsidianSecretField } from "./secretField";
 import { createRenderTitle } from "./titleRenderer";
@@ -253,24 +249,22 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 		try {
 			// An editor opened before a reload saves a copy of what the id
 			// named then; `previous` is what it names now. Refuse before
-			// anything (like the 🔁 shim) mixes the two tasks.
+			// anything mixes the two tasks.
 			const copyLine = task.extra?.rawText;
 			const currentLine = previous.extra?.rawText;
 			if (copyLine && currentLine && !isSameTaskLine(copyLine, currentLine)) {
 				throw new StaleTaskError(task.id);
 			}
-			const incoming = keepRecurrenceDroppedByModal(task, previous);
-			if (!taskUpdateNeedsWrite(incoming, previous)) {
+			if (!taskUpdateNeedsWrite(task, previous)) {
 				return;
 			}
-			const storedText =
-				await stableTasksRepo.current.writeTaskLine(incoming);
+			const storedText = await stableTasksRepo.current.writeTaskLine(task);
 			// Update local state only after successful save, with the line as
 			// now written: an editor opened from this copy before the reload
 			// must still match the reloaded task.
 			const stored = {
-				...incoming,
-				extra: { ...incoming.extra, rawText: storedText },
+				...task,
+				extra: { ...task.extra, rawText: storedText },
 			};
 			setTasks((prev) =>
 				prev.map((t) => (t.id === stored.id ? stored : t)),

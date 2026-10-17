@@ -201,7 +201,8 @@ describe("createObsidianCapabilityContext keeps task data current (MCP)", () => 
 
 		expect(result).toMatchObject({ success: true });
 		await expect(app.vault.cachedRead(file)).resolves.toBe(
-			`- [ ] Water plants ⏫ 📅 2026-10-17 🔁 every day\n${DONE}\n`,
+			// The line is edited in place: the new field goes after the last one.
+			`- [ ] Water plants 🔁 every day 📅 2026-10-17 ⏫\n${DONE}\n`,
 		);
 	});
 
