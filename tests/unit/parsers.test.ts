@@ -37,4 +37,28 @@ describe("parseDataViewFormatItem", () => {
 
 		expect(result.startAt).toBe("2026-06-15");
 	});
+
+	it("reads fields after the Tasks fields and leaves them in the notes", () => {
+		const task = makeTask({
+			title: "Task",
+			extra: { lineNotes: "see [[Notes]] [[due:: 2026-10-25]]" },
+		});
+		const result = parseDataViewFormatItem(task);
+
+		expect(result.dueAt).toBe("2026-10-25");
+		expect(result.title).toBe("Task");
+		expect(result.extra?.lineNotes).toBe("see [[Notes]] [[due:: 2026-10-25]]");
+	});
+
+	it("lets a field in the notes override one in the title", () => {
+		const task = makeTask({
+			title: "Task [[due:: 2026-10-20]]",
+			extra: { lineNotes: "[[due:: 2026-10-25]]" },
+		});
+
+		expect(parseDataViewFormatItem(task)).toMatchObject({
+			title: "Task",
+			dueAt: "2026-10-25",
+		});
+	});
 });

@@ -767,3 +767,116 @@ describe("ObsidianTasksRepo deleting a task with sub-tasks", () => {
 		);
 	});
 });
+
+describe("ObsidianTasksRepo with Dataview inline fields", () => {
+	async function loadOnly(content: string) {
+		const { app, file, repo } = createRepo(content);
+		const [task] = await repo.loadTasks();
+		if (!task) throw new Error(`No task parsed from: ${content}`);
+		return { app, file, repo, task };
+	}
+
+	const IN_TITLE = "- [ ] Task [[project:: Alpha]] [[due:: 2026-10-25]]\n";
+	const AFTER_FIELDS = "- [ ] Task ➕ 2026-10-01 [[due:: 2026-10-25]]\n";
+
+	it("reads a field after the Tasks fields (extra.lineNotes)", async () => {
+		const { task } = await loadOnly(AFTER_FIELDS);
+
+		expect(task).toMatchObject({ title: "Task", dueAt: "2026-10-25" });
+		expect(task.extra?.lineNotes).toBe("[[due:: 2026-10-25]]");
+	});
+
+	it.each([
+		[
+			"completes a task, keeping fields in the title",
+			IN_TITLE,
+			{ status: "done", completedAt: "2026-10-17" },
+			"- [x] Task [[project:: Alpha]] [[due:: 2026-10-25]] ✅ 2026-10-17\n",
+		],
+		[
+			"completes a task, keeping fields after the Tasks fields",
+			AFTER_FIELDS,
+			{ status: "done", completedAt: "2026-10-17" },
+			"- [x] Task ➕ 2026-10-01 ✅ 2026-10-17 [[due:: 2026-10-25]]\n",
+		],
+		[
+			"renames a task, keeping the fields in its title",
+			IN_TITLE,
+			{ title: "Task renamed" },
+			"- [ ] Task renamed [[project:: Alpha]] [[due:: 2026-10-25]]\n",
+		],
+		[
+			"changes a due date in its Dataview field (title)",
+			IN_TITLE,
+			{ dueAt: "2026-10-30" },
+			"- [ ] Task [[project:: Alpha]] [[due:: 2026-10-30]]\n",
+		],
+		[
+			"changes a due date in its Dataview field (after the fields)",
+			AFTER_FIELDS,
+			{ dueAt: "2026-10-30" },
+			"- [ ] Task ➕ 2026-10-01 [[due:: 2026-10-30]]\n",
+		],
+		[
+			"removes the Dataview field of a cleared due date",
+			IN_TITLE,
+			{ dueAt: undefined },
+			"- [ ] Task [[project:: Alpha]]\n",
+		],
+		[
+			"keeps a 📅 date the Dataview field overrides",
+			"- [ ] Task 📅 2026-10-20 [[due:: 2026-10-25]]\n",
+			{ status: "done", completedAt: "2026-10-17" },
+			"- [x] Task 📅 2026-10-20 ✅ 2026-10-17 [[due:: 2026-10-25]]\n",
+		],
+		[
+			"removes a tag next to a Dataview field",
+			"- [ ] Pay #home rent [[due:: 2026-10-25]]\n",
+			{ tags: [] },
+			"- [ ] Pay rent [[due:: 2026-10-25]]\n",
+		],
+		[
+			"keeps a tag inside a Dataview field",
+			"- [ ] Task [[project:: #alpha]] [[due:: 2026-10-25]]\n",
+			{ dueAt: "2026-10-30" },
+			"- [ ] Task [[project:: #alpha]] [[due:: 2026-10-30]]\n",
+		],
+		[
+			"reopens a task completed in a Dataview field",
+			"- [x] Task [[completion:: 2026-10-17]]\n",
+			{ status: "todo", completedAt: undefined },
+			"- [ ] Task\n",
+		],
+	] as [string, string, Partial<Task>, string][])(
+		"%s",
+		async (_case, content, changes, expected) => {
+			const { app, file, repo, task } = await loadOnly(content);
+			const edited: Task = { ...task, ...changes };
+
+			expect(taskUpdateNeedsWrite(edited, task)).toBe(true);
+			await repo.updateTask(edited);
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(expected);
+		},
+	);
+
+	it.each([IN_TITLE, AFTER_FIELDS])(
+		"needs no write for an edit that changes nothing (%j)",
+		async (content) => {
+			const { task } = await loadOnly(content);
+
+			expect(taskUpdateNeedsWrite({ ...task }, task)).toBe(false);
+		},
+	);
+
+	it("reads its own write back with the same fields", async () => {
+		const { app, repo, task } = await loadOnly(IN_TITLE);
+		reindexAfterWrites(app);
+
+		await repo.updateTask({ ...task, dueAt: "2026-10-30" });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const [reloaded] = await repo.loadTasks();
+		expect(reloaded).toMatchObject({ title: "Task", dueAt: "2026-10-30" });
+	});
+});

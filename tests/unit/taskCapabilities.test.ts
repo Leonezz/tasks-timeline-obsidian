@@ -418,6 +418,28 @@ describe("createObsidianCapabilityContext stores recurrence as Obsidian Tasks te
 	});
 });
 
+describe("createObsidianCapabilityContext with Dataview inline fields (MCP)", () => {
+	it("completes a recurring task whose due date is a Dataview field after its fields", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(
+			"- [ ] Review 🔁 every week ➕ 2026-10-01 [[due:: 2026-10-16]]\n",
+		);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: await listedId(capabilities, "Review"),
+		});
+
+		expect(result).toMatchObject({ success: true });
+		const [done, next] = (await app.vault.cachedRead(file)).split("\n");
+		expect(done).toMatch(
+			/^- \[x\] Review 🔁 every week ➕ 2026-10-01 ✅ \d{4}-\d{2}-\d{2} \[\[due:: 2026-10-16\]\]$/,
+		);
+		// The next due date goes in the Dataview field, as on the done line.
+		expect(next).toMatch(
+			/^- \[ \] Review ➕ \d{4}-\d{2}-\d{2} 🔁 every week \[\[due:: 2026-10-23\]\]$/,
+		);
+	});
+});
+
 describe("createObsidianCapabilityContext with sub-tasks (MCP)", () => {
 	it("refuses to delete a parent task", async () => {
 		const content = "- [ ] Parent\n\t- [ ] Child\n";

@@ -10,68 +10,100 @@ import { DateTime } from "luxon";
 // @tasks-timeline/components (src/tasks-format, released after v0.4.35);
 // only Obsidian-specific parsers remain here.
 
+/** A Dataview inline field, `[[key:: value]]`, as written in a task line. */
+export interface InlineField {
+	/** The field as written, brackets included. */
+	text: string;
+	key: string;
+	value: string;
+}
+
+/** The Dataview inline fields in `text`, in order. */
+export function inlineFieldsIn(text: string): InlineField[] {
+	return [...text.matchAll(TaskRegularExpressions.keyValueRegex)].flatMap(
+		([fieldText, key, value]) =>
+			fieldText !== undefined && key && value
+				? [{ text: fieldText, key, value }]
+				: [],
+	);
+}
+
+/** `text` without its Dataview inline fields, as the timeline shows titles. */
+export function withoutInlineFields(text: string): string {
+	return text.replace(TaskRegularExpressions.keyValueRegex, "");
+}
+
+/** The task date fields Dataview keys stand for. */
+export type InlineDateField =
+	| "dueAt"
+	| "scheduledAt"
+	| "completedAt"
+	| "createdAt"
+	| "startAt";
+
+const INLINE_DATE_FIELDS: Record<string, InlineDateField> = {
+	due: "dueAt",
+	scheduled: "scheduledAt",
+	complete: "completedAt",
+	completion: "completedAt",
+	done: "completedAt",
+	created: "createdAt",
+	start: "startAt",
+};
+
+/** The date an inline field holds (YYYY-MM-DD), or undefined. */
+export function inlineFieldDate(field: InlineField): string | undefined {
+	const date = DateTime.fromFormat(
+		field.value.trim(),
+		TaskRegularExpressions.dateFormat,
+	);
+	return date.isValid ? (date.toISODate() ?? undefined) : undefined;
+}
+
+/** The task date field an inline field's key stands for, if any. */
+export function inlineDateFieldOf(
+	field: InlineField,
+): InlineDateField | undefined {
+	return INLINE_DATE_FIELDS[field.key.trim().toLowerCase()];
+}
+
+function applyInlineField(item: Task, field: InlineField): void {
+	const date = inlineFieldDate(field);
+	if (!date) {
+		console.warn(
+			"Parse date for item failed, value: ",
+			field.value,
+			", item: ",
+			item,
+		);
+		return;
+	}
+	if (!item.extra) {
+		item.extra = {};
+	}
+	const dateField = inlineDateFieldOf(field);
+	if (dateField === "scheduledAt") {
+		item.extra["scheduledAt"] = date;
+	} else if (dateField) {
+		item[dateField] = date;
+	} else {
+		item.extra[field.key.trim().toLowerCase()] = field.value;
+	}
+}
+
+/**
+ * Reads Dataview inline fields (`[[key:: value]]`) in the title and in the
+ * notes after the Tasks fields (`extra.lineNotes`). Fields in the title are
+ * taken out of it; the line keeps them (see lineWriter.ts). A field later on
+ * the line overrides an earlier one, and the Tasks field for the same date.
+ */
 export const parseDataViewFormatItem = (item: Task): Task => {
-	let itemText = item.title;
-	const inlineFields = itemText.match(TaskRegularExpressions.keyValueRegex);
-	if (!inlineFields) {
-		return item;
-	}
-	for (const inlineField of inlineFields) {
-		// this is necessary since every time RegEx.exec,
-		// the lastIndex changed like an internal state.
-		TaskRegularExpressions.keyValueRegex.lastIndex = 0;
-		const tkv = TaskRegularExpressions.keyValueRegex.exec(inlineField)!;
-		const [text, key, value] = [tkv[0], tkv[1], tkv[2]];
-		console.debug(
-			`DEBUG: text: [${text}], key: [${key}], value: [${value}]`
-		);
-		itemText = itemText.replace(text, "");
-		if (!key || !value) continue;
-		const normalizedKey = key?.trim().toLowerCase();
-		console.debug(
-			`DEBUG: [${normalizedKey}], length: [${normalizedKey.length}]`
-		);
-		const normalizedValue = value.trim();
-		const fieldDate = DateTime.fromFormat(
-			normalizedValue,
-			TaskRegularExpressions.dateFormat
-		);
-		if (!fieldDate.isValid) {
-			console.warn(
-				"Parse date for item failed, value: ",
-				fieldDate,
-				", item: ",
-				item
-			);
-			continue;
-		}
-		if (!item.extra) {
-			item.extra = {};
-		}
-		switch (normalizedKey) {
-			case "due":
-				item.dueAt = fieldDate.toISODate();
-				break;
-			case "scheduled":
-				item.extra["scheduledAt"] = fieldDate.toISODate();
-				break;
-			case "complete":
-			case "completion":
-			case "done":
-				item.completedAt = fieldDate.toISODate();
-				break;
-			case "created":
-				item.createdAt = fieldDate.toISODate();
-				break;
-			case "start":
-				item.startAt = fieldDate.toISODate();
-				break;
-			default:
-				item.extra[normalizedKey] = value;
-				break;
-		}
-	}
-	item.title = itemText;
+	const fields = [
+		...inlineFieldsIn(item.title),
+		...inlineFieldsIn(item.extra?.lineNotes ?? ""),
+	];
+	fields.forEach((field) => applyInlineField(item, field));
+	item.title = withoutInlineFields(item.title).trim();
 	return item;
 };
 
@@ -105,19 +137,26 @@ export const remainderParser = (item: Task): Task => {
 	return item;
 };
 
+/** The `#tags` in `text`, each with the space before it. */
+function tagsIn(text: string): string[] {
+	return text.match(TaskRegularExpressions.hashTags) ?? [];
+}
+
+/** `text` without its `#tags`, as tagsParser takes them out of titles. */
+export function withoutTags(text: string): string {
+	return tagsIn(text).reduce((rest, tag) => rest.replace(tag, "").trim(), text);
+}
+
 export const tagsParser = (item: Task): Task => {
-	const match = item.title.match(TaskRegularExpressions.hashTags);
-	if (!match) {
-		return item;
-	}
-	for (const m of match) {
-		item.title = item.title.replace(m, "").trim();
+	const tags = tagsIn(item.title);
+	item.title = withoutTags(item.title);
+	tags.forEach((m) => {
 		const tag = m.trim();
 		item.tags.push({
 			id: tag,
 			name: tag,
 		});
-	}
+	});
 	return item;
 };
 

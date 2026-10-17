@@ -18,6 +18,7 @@ import {
 } from "./parsers";
 import TasksTimelineObsidianPlugin from "./main";
 import { Link } from "./link";
+import { withNotesForNewLine, writeTaskOnLine } from "./lineWriter";
 import {
 	filePathOfTaskId,
 	hasNestedItems,
@@ -109,7 +110,7 @@ export function taskUpdateNeedsWrite(task: Task, previous: Task): boolean {
 	if (!rawText) {
 		return true;
 	}
-	return taskToMarkdown(task, rawText) !== taskToMarkdown(previous, rawText);
+	return writeTaskOnLine(task, rawText) !== writeTaskOnLine(previous, rawText);
 }
 
 /**
@@ -398,7 +399,10 @@ export class ObsidianTasksRepo implements TaskRepository {
 		// it ("Pay rent 📅 2026-10-20") stay on the line as typed.
 		const statusMarker = task.status === "done" ? "x" : " ";
 		const templateLine = `- [${statusMarker}] ${task.title}`;
-		const taskLine = taskToMarkdown(withTypedFields(task), templateLine);
+		const taskLine = taskToMarkdown(
+			withTypedFields(withNotesForNewLine(task)),
+			templateLine,
+		);
 
 		const descriptionLine = task.description?.trim()
 			? "\t" + task.description.trim().replace(/\n/g, "\n\t")
@@ -538,7 +542,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 			if (originalLine === undefined) {
 				return content;
 			}
-			const newLine = taskToMarkdown(task, originalLine);
+			const newLine = writeTaskOnLine(task, originalLine);
 			outcome.writtenLine = newLine;
 			return [
 				...lines.slice(0, lineIndex),

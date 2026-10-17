@@ -199,6 +199,21 @@ describe("ObsidianAdaptor task handlers", () => {
 		});
 	});
 
+	it("keeps Dataview fields when a task is toggled in the timeline", async () => {
+		const { app, file, previous } = await renderAdaptor(
+			"- [ ] Task [[project:: Alpha]] [[due:: 2026-10-25]]\n",
+		);
+
+		await mockAppProps!.onTaskUpdated(
+			{ ...previous, status: "done", completedAt: "2026-10-17" },
+			previous,
+		);
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [x] Task [[project:: Alpha]] [[due:: 2026-10-25]] ✅ 2026-10-17\n",
+		);
+	});
+
 	describe("with a recurring task", () => {
 		const RECURRING = "- [ ] Water plants 📅 2026-10-16 🔁 every day\n";
 
