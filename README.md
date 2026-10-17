@@ -11,7 +11,7 @@ Tasks are read from and written to [Obsidian Tasks](https://publish.obsidian.md/
 
 - **Fields**: 🛫 start, ⏳ scheduled, 📅 due, ✅ done, ❌ cancelled and ➕ created dates, priorities, 🔁 recurrence, 🏁 on-completion, 🆔 id and ⛔ depends-on.
 - **Recurrence** is saved as Obsidian Tasks text (`🔁 every week on Monday`), from the task editor, the in-app agent and MCP clients alike. A `🔁` that runs straight into other text (`🔁 every day at 9:30`) is part of the title, not a rule. MCP clients can't set a rule with a number of repetitions (`COUNT`): each completion would count again, so the rule would never end. Use an end date instead.
-- **Titles are one line.** A title with a line break (which only an AI client can send) is refused with an error instead of being written as extra lines.
+- **Titles are one line.** A title with a line break, including the Unicode line and paragraph separators (U+2028, U+2029), is refused with an error instead of being written as extra lines. Only an AI client can send one.
 - **Typing fields into a new task's title** works: adding `Pay rent 📅 2026-10-20 ⏫` creates the task with that due date and priority.
 - **Dataview inline fields** (`[[due:: 2026-10-25]]`) are read in the title and after the fields, and stay on the line. Their dates are the task's dates: changing the due date rewrites `[[due:: …]]`, and clearing it removes the field.
 - **Reminders** (`⏰ 2026-10-16 09:00` and obsidian-reminder's `(@2026-10-16 09:00)`) stay on the line, out of the title.
@@ -35,7 +35,9 @@ Version 0.3.0 and earlier also misread such a task: saving it again (ticking or 
 RRULE:FREQ=WEEKLY;INTERVAL=1
 ```
 
-That task is repaired the same way, and the start date is taken out of the title.
+That task is repaired the same way, and the start date is taken out of the title. A priority those versions wrote before the start date (`- [x] Report ⏫  :20261015T160000Z 📅 …`) is read as the task's priority, as are other fields there, and stays on the repaired line.
+
+If Obsidian has indexed the task without its `RRULE:` line, completing it through MCP fails with the exact rule to write by hand; editing the task once repairs the line instead.
 
 A rule that can't be written as text with the same dates is refused with an error, and the note is left as it is: rules with `COUNT`, a task date before the rule's start or out of step with its interval, hourly rules, or a `🔁 DTSTART` whose start date is gone from the line. Repair those by hand: delete the `RRULE:` line, remove a start date left in the title (`:20261015T160000Z`), and replace `🔁 DTSTART…` with the rule as text, such as `🔁 every week`. A copy of such a task with `🔁 DTSTART` and no `RRULE:` line below has lost its rule altogether; completing it fails with an error until you write the rule by hand.
 

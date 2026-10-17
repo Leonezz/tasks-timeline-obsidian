@@ -20,9 +20,11 @@ import TasksTimelineObsidianPlugin from "./main";
 import { Link } from "./link";
 import { withNotesForNewLine, writeTaskOnLine } from "./lineWriter";
 import {
+	asReadFromRepairedLine,
+	readWithRuleLine,
 	repairSplitRule,
+	splitRuleFix,
 	withJoinedSplitRule,
-	withRepairedRule,
 } from "./splitRule";
 import {
 	filePathOfTaskId,
@@ -140,13 +142,11 @@ export function taskUpdateNeedsWrite(task: Task, previous: Task): boolean {
 	}
 	// Compared on the line a rule split by v0.8.0 is repaired to, so a no-op
 	// edit leaves such a line alone (writeTaskLine repairs it on a change).
+	// A task read with the rule's second line was read as that line reads.
 	const [line = "", next, ...below] = rawText.split("\n");
 	const repair = repairSplitRule(line, next);
 	const text = repair ? [repair.line, ...below].join("\n") : rawText;
-	return (
-		writeTaskOnLine(withRepairedRule(task, repair), text) !==
-		writeTaskOnLine(withRepairedRule(previous, repair), text)
-	);
+	return writeTaskOnLine(task, text) !== writeTaskOnLine(previous, text);
 }
 
 /**
@@ -646,11 +646,16 @@ export class ObsidianTasksRepo implements TaskRepository {
 				return content;
 			}
 			// A rule v0.8.0 split over this line and the next is joined
-			// back into this one.
+			// back into this one. A task read without the rule's second
+			// line is first made the task the joined line holds.
 			const nextLine = lines[lineIndex + 1];
 			const repair = repairSplitRule(originalLine, nextLine);
+			const lineTask =
+				repair && !readWithRuleLine(expectedLine)
+					? asReadFromRepairedLine(task, originalLine, repair)
+					: task;
 			const newLine = writeTaskOnLine(
-				withRepairedRule(task, repair),
+				lineTask,
 				repair?.line ?? originalLine,
 			);
 			outcome.writtenLine = newLine;
@@ -686,6 +691,34 @@ export class ObsidianTasksRepo implements TaskRepository {
 		});
 		this.invalidateFile(filePath);
 		return storedText;
+	}
+
+	/**
+	 * The manual fix for a task whose recurrence rule v0.8.0 split over its
+	 * line and the next, for a task whose rule reads as "DTSTART…" (it was
+	 * read without the second line, or the rule can't be joined). See
+	 * {@link splitRuleFix}.
+	 *
+	 * @returns undefined when its line holds no split rule
+	 */
+	async splitRuleFix(id: string): Promise<string | undefined> {
+		const snapshot = this.taskCache.get(id);
+		if (!snapshot) {
+			throw new Error(
+				`Cannot read task ${id}: it was never read from the vault — query tasks again.`,
+			);
+		}
+		const file = this.plugin.app.vault.getAbstractFileByPath(snapshot.file);
+		if (!(file instanceof TFile)) {
+			throw new Error(`Cannot read task ${id}: file not found: ${snapshot.file}`);
+		}
+		const lines = (await this.plugin.app.vault.cachedRead(file)).split("\n");
+		const index = locateTaskLine(lines, snapshot.rawText, snapshot.position);
+		const line = lines[index];
+		if (line === undefined) {
+			throw new StaleTaskError(id);
+		}
+		return splitRuleFix(line, lines[index + 1]);
 	}
 
 	async deleteTask(id: string): Promise<void> {

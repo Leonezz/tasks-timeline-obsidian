@@ -9,6 +9,13 @@ import {
 	indexFileWithSplitRules,
 	reindexAfterWrites,
 } from "../helpers/testHelpers";
+import {
+	LEFT_START,
+	readFieldsOf,
+	RESAVED_SPLIT_RULES,
+	RULE_LINE,
+	type ResavedSplitRule,
+} from "../fixtures/v080SplitRules";
 
 function createRepo(content: string) {
 	const app = new App();
@@ -1185,6 +1192,115 @@ describe("ObsidianTasksRepo with a rule v0.8.0 split over two lines", () => {
 				"- [x] Weekly report 📅 2026-10-16 ✅ 2026-10-17 🔁 every week on Friday\n- [ ] Next\n",
 			);
 		});
+	});
+
+	/*
+	 * Lines v0.8.0 split and saved again (see the fixtures): what v0.8.0 put
+	 * before the start date it left in the title (a priority, a tag, a
+	 * date) reads as fields once the lines are joined, and every edit is
+	 * written onto the joined line with those fields.
+	 */
+	describe.each([
+		["with the rule's second line", indexFileWithSplitRules],
+		["without the rule's second line", indexFile],
+	])("v0.8.0's re-saved lines, indexed %s", (_index, index) => {
+		function createResavedRepo(fixture: ResavedSplitRule) {
+			const content = `${fixture.line}\n${RULE_LINE}\n- [ ] Next\n`;
+			const created = createRepo(content);
+			index(created.app, "Tasks.md", content);
+			return { ...created, content };
+		}
+
+		async function reread(
+			created: ReturnType<typeof createResavedRepo>,
+		): Promise<{ lines: string[]; task: Task }> {
+			const content = await created.app.vault.cachedRead(created.file);
+			indexFile(created.app, "Tasks.md", content);
+			created.repo.invalidateFile("Tasks.md");
+			const [task] = await created.repo.loadTasks();
+			return { lines: content.split("\n"), task: task! };
+		}
+
+		const edits: [string, (task: Task) => Partial<Task>][] = [
+			[
+				"a tick or untick",
+				(task) =>
+					task.status === "done"
+						? { status: "todo", completedAt: undefined }
+						: { status: "done", completedAt: "2026-10-18" },
+			],
+			["a rename", () => ({ title: "Monthly summary" })],
+			[
+				"a priority",
+				(task) => ({ priority: task.priority === "low" ? "high" : "low" }),
+			],
+			["a reschedule", () => ({ dueAt: "2026-10-30" })],
+		];
+
+		describe.each(RESAVED_SPLIT_RULES)("$name", (fixture) => {
+			it("leaves the note alone for an edit that changes nothing", async () => {
+				const { app, file, repo, content } = createResavedRepo(fixture);
+				const [task] = await repo.loadTasks();
+
+				expect(taskUpdateNeedsWrite({ ...task! }, task!)).toBe(false);
+				await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+			});
+
+			it.each(edits)("writes %s onto the joined line", async (_edit, edit) => {
+				const created = createResavedRepo(fixture);
+				const [task] = await created.repo.loadTasks();
+				const changes = edit({ ...task!, ...fixture.read } as Task);
+				const edited = { ...task!, ...changes };
+
+				expect(taskUpdateNeedsWrite(edited, task!)).toBe(true);
+				await created.repo.updateTask(edited);
+
+				const { lines, task: stored } = await reread(created);
+				expect(lines).toEqual([expect.any(String), "- [ ] Next", ""]);
+				expect(lines[0]).not.toContain("DTSTART");
+				expect(lines[0]).not.toContain(LEFT_START);
+				expect(lines[0]).toMatch(
+					edited.status === "done" ? /^- \[x\] / : /^- \[ \] /,
+				);
+				const { status: _status, ...expected } = {
+					...fixture.read,
+					...changes,
+				};
+				expect(readFieldsOf(stored, expected)).toEqual(expected);
+				expect(stored).toMatchObject({
+					isRecurring: true,
+					recurringInterval: "every week on Friday",
+				});
+			});
+		});
+	});
+
+	describe.each(RESAVED_SPLIT_RULES)("v0.8.0's re-saved line: $name", (fixture) => {
+		it("reads as the joined line reads", async () => {
+			const content = `${fixture.line}\n${RULE_LINE}\n- [ ] Next\n`;
+			const { repo } = createSplitRepo(content);
+
+			const [task] = await repo.loadTasks();
+
+			expect(readFieldsOf(task!, fixture.read)).toEqual(fixture.read);
+			expect(task).toMatchObject({
+				isRecurring: true,
+				recurringInterval: "every week on Friday",
+			});
+		});
+	});
+
+	it("unticks a re-saved high-priority task onto the joined line, keeping ⏫", async () => {
+		const [fixture] = RESAVED_SPLIT_RULES;
+		const content = `${fixture!.line}\n${RULE_LINE}\n- [ ] Next\n`;
+		const { app, file, repo } = createSplitRepo(content);
+		const [task] = await repo.loadTasks();
+
+		await repo.updateTask({ ...task!, status: "todo", completedAt: undefined });
+
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Report ⏫ 📅 2026-10-16 🔁 every week on Friday\n- [ ] Next\n",
+		);
 	});
 
 	it("refuses a rule it can't repair, with the manual fix, and leaves the note", async () => {

@@ -1,5 +1,11 @@
+import { parseTasksFormatItem, type Task } from "@tasks-timeline/components";
 import { DateTime } from "luxon";
-import { repairSplitRule } from "../../src/splitRule";
+import {
+	asReadFromRepairedLine,
+	repairSplitRule,
+	splitRuleFix,
+} from "../../src/splitRule";
+import { LEFT_START, RULE_LINE } from "../fixtures/v080SplitRules";
 
 /** DTSTART as v0.8.0's editor wrote it: local midnight, in UTC. */
 const dtstart = (date: string) =>
@@ -192,5 +198,68 @@ describe("repairSplitRule on a line v0.8.0 saved again", () => {
 				`COUNT.*delete the "RRULE:" line below the task, remove "${left}" from the title, and replace "🔁 DTSTART"`,
 			),
 		);
+	});
+});
+
+describe("asReadFromRepairedLine", () => {
+	const LINE = `- [ ] Report ⏫  ${LEFT_START} 📅 2026-10-16 🔁 DTSTART`;
+	const repair = repairSplitRule(LINE, RULE_LINE)!;
+	/** The task as read from LINE alone. */
+	const asRead: Task = parseTasksFormatItem({
+		id: "Tasks.md:0:0",
+		title: LINE.slice("- [ ] ".length),
+		status: "todo",
+		priority: "medium",
+		tags: [],
+	});
+
+	it("reads the priority v0.8.0 wrote before the start date", () => {
+		expect(asRead).toMatchObject({ title: `Report ⏫  ${LEFT_START}`, priority: "medium" });
+
+		expect(asReadFromRepairedLine(asRead, LINE, repair)).toMatchObject({
+			title: "Report",
+			priority: "high",
+			dueAt: "2026-10-16",
+			isRecurring: true,
+			recurringInterval: "every week on Friday",
+		});
+	});
+
+	it.each([
+		["a priority", { priority: "low" as const }, { title: "Report", priority: "low" }],
+		["a due date", { dueAt: "2026-10-23" }, { priority: "high", dueAt: "2026-10-23" }],
+		["a rule", { recurringInterval: "every month" }, { priority: "high", recurringInterval: "every month" }],
+		["a title without the priority", { title: "Weekly report" }, { title: "Weekly report", priority: "high" }],
+		["a title with the start date", { title: `Weekly report ⏫  ${LEFT_START}` }, { title: "Weekly report", priority: "high" }],
+	])("keeps an edit of %s", (_kind, edit, expected) => {
+		expect(
+			asReadFromRepairedLine({ ...asRead, ...edit }, LINE, repair),
+		).toMatchObject(expected);
+	});
+});
+
+describe("splitRuleFix", () => {
+	it("names the joined rule to write and the start date to remove", () => {
+		const fix = splitRuleFix(
+			`- [ ] Report  ${LEFT_START} 🔁 DTSTART`,
+			RULE_LINE,
+		);
+
+		expect(fix).toBe(
+			`Cannot read the recurrence rule v0.8.0 split over two lines ("🔁 DTSTART" and "${RULE_LINE}"): Obsidian indexed the task without the "RRULE:" line. Edit the note: delete the "RRULE:" line below the task, remove "${LEFT_START}" from the title, and replace "🔁 DTSTART" with "🔁 every week on Friday 🛫 2026-10-16". Or change the task once (in the timeline or with update_task), which joins the two lines.`,
+		);
+	});
+
+	it("says why a rule can't be joined", () => {
+		expect(
+			splitRuleFix(
+				`- [ ] Report  ${LEFT_START} 📅 2026-10-16 🔁 DTSTART`,
+				"RRULE:FREQ=WEEKLY;COUNT=5",
+			),
+		).toMatch(/COUNT.*delete the "RRULE:" line below the task/);
+	});
+
+	it("is undefined for a line without a split rule", () => {
+		expect(splitRuleFix("- [ ] Report 🔁 every week", RULE_LINE)).toBeUndefined();
 	});
 });

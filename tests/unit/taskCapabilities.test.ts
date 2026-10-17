@@ -18,6 +18,11 @@ import {
 	indexFileWithSplitRules,
 	reindexAfterWrites,
 } from "../helpers/testHelpers";
+import {
+	LEFT_START,
+	RESAVED_SPLIT_RULES,
+	RULE_LINE,
+} from "../fixtures/v080SplitRules";
 
 function createMcpCapabilities(content: string, blacklist = "") {
 	const app = new App();
@@ -641,6 +646,142 @@ describe("createObsidianCapabilityContext with a split rule above another task (
 			),
 			"",
 		]);
+	});
+});
+
+/*
+ * Lines v0.8.0 split and saved again (see the fixtures), with the priority,
+ * tag or dates it wrote before the start date it left in the title.
+ */
+describe("createObsidianCapabilityContext with a rule v0.8.0 split and saved again (MCP)", () => {
+	interface ListedTask {
+		id: string;
+		title: string;
+		status: string;
+		priority: string;
+		dueAt?: string;
+	}
+
+	async function listed(capabilities: Capabilities): Promise<ListedTask[]> {
+		const { result } = await capabilities.executeTool("query_tasks", {});
+		return (result as { tasks: ListedTask[] }).tasks;
+	}
+
+	function createResaved(line: string, index = indexFileWithSplitRules) {
+		const content = `${line}\n${RULE_LINE}\n- [ ] Next\n`;
+		const created = createMcpCapabilities(content);
+		index(created.app, "Tasks.md", content);
+		return { ...created, content };
+	}
+
+	const open = RESAVED_SPLIT_RULES.filter(
+		(fixture) => fixture.read.status !== "done",
+	);
+
+	it.each(open.map((fixture) => [fixture.name, fixture] as const))(
+		"completes a task with %s, keeping its priority on both occurrences",
+		async (_name, fixture) => {
+			const { app, file, capabilities } = createResaved(fixture.line);
+
+			const { result } = await capabilities.executeTool("complete_task", {
+				id: await listedId(capabilities, fixture.read.title!),
+			});
+
+			expect(result).toMatchObject({
+				success: true,
+				createdNextOccurrence: true,
+			});
+			const lines = (await app.vault.cachedRead(file)).split("\n");
+			expect(lines).toEqual([
+				expect.stringMatching(/^- \[x\] .*🔁 every week on Friday/),
+				"- [ ] Next",
+				expect.stringMatching(/^- \[ \] .*🔁 every week on Friday/),
+				"",
+			]);
+			expect(lines.join("\n")).not.toContain("DTSTART");
+			indexFile(app, "Tasks.md", lines.join("\n"));
+			const [done, , next] = await listed(capabilities);
+			expect(done).toMatchObject({
+				title: fixture.read.title,
+				status: "done",
+				priority: fixture.read.priority,
+			});
+			expect(next).toMatchObject({
+				title: fixture.read.title,
+				priority: fixture.read.priority,
+				dueAt: DateTime.fromISO(fixture.read.dueAt!)
+					.plus({ weeks: 1 })
+					.toISODate(),
+			});
+		},
+	);
+
+	it.each(
+		RESAVED_SPLIT_RULES.flatMap((fixture) => [
+			[fixture.name, "with", fixture, indexFileWithSplitRules] as const,
+			[fixture.name, "without", fixture, indexFile] as const,
+		]),
+	)(
+		"changes the priority of a task with %s, indexed %s the rule's second line",
+		async (_name, _with, fixture, index) => {
+			const { app, file, capabilities } = createResaved(fixture.line, index);
+			const priority = fixture.read.priority === "low" ? "high" : "low";
+			const [listedTask] = await listed(capabilities);
+
+			const { result } = await capabilities.executeTool("update_task", {
+				id: listedTask!.id,
+				priority,
+			});
+
+			expect(result).toMatchObject({ success: true });
+			const content = await app.vault.cachedRead(file);
+			expect(content).toMatch(/^- \[.\] .*🔁 every week on Friday.*\n- \[ \] Next\n$/);
+			expect(content).not.toContain("DTSTART");
+			indexFile(app, "Tasks.md", content);
+			const [task] = await listed(capabilities);
+			expect(task).toMatchObject({ title: fixture.read.title, priority });
+		},
+	);
+
+	it("refuses to complete an open task indexed without the rule's second line, with the manual fix", async () => {
+		const fixture = open.find((f) => f.read.priority === "low")!;
+		const { app, file, capabilities, content } = createResaved(
+			fixture.line,
+			indexFile,
+		);
+		const [task] = await listed(capabilities);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: task!.id,
+		});
+
+		expect(result).toMatchObject({ success: false });
+		const error = (result as { error: string }).error;
+		expect(error).toMatch(/v0\.8\.0 split over two lines/);
+		expect(error).toContain(
+			`delete the "RRULE:" line below the task, remove "${LEFT_START}" from the title, and replace "🔁 DTSTART" with "🔁 every week on Friday"`,
+		);
+		expect(error).toMatch(/was not completed/);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+
+	it("refuses to complete a task whose rule can't be joined, with the manual fix", async () => {
+		const content = `- [ ] Report ⏫  ${LEFT_START} 📅 2026-10-16 🔁 DTSTART\nRRULE:FREQ=WEEKLY;COUNT=5\n`;
+		const { app, file, capabilities } = createMcpCapabilities(content);
+		indexFileWithSplitRules(app, "Tasks.md", content);
+		const [task] = await listed(capabilities);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: task!.id,
+		});
+
+		expect(result).toMatchObject({ success: false });
+		expect((result as { error: string }).error).toMatch(
+			new RegExp(
+				`COUNT.*delete the "RRULE:" line below the task, remove "${LEFT_START}" from the title.*was not completed`,
+			),
+		);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
 	});
 });
 

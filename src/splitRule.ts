@@ -56,6 +56,9 @@ export interface SplitRuleRepair {
 
 class RepairError extends Error {}
 
+/** A split rule that can't be joined, with the manual fix. */
+class UnrepairableRuleError extends Error {}
+
 /** The day DTSTART starts on: in local time for a UTC time, else as written. */
 function startDate(dtstart: string): DateTime {
 	const [, params = "", date = "", time, utc] = DTSTART.exec(dtstart) ?? [];
@@ -192,11 +195,29 @@ function withoutFragment(text: string, fragment: string): string {
 	);
 }
 
-/** The start date v0.8.0 left in a title, when there is exactly one. */
-function leftStartDate(title: string): string | undefined {
-	const found = [...title.matchAll(LEFT_START)].map((match) => match[1]);
+/**
+ * The start date v0.8.0 left in a title, when there is exactly one. A field
+ * before it (a date typed ahead of the rule) ends the title, so it can also
+ * be in the text after that field.
+ */
+function leftStartDate(read: Task): string | undefined {
+	const text = `${read.title} ${read.extra?.["lineNotes"] ?? ""}`;
+	const found = [...text.matchAll(LEFT_START)].map((match) => match[1]);
 	return found.length === 1 ? found[0] : undefined;
 }
+
+/** A task with no fields, titled `title`, for reading fields out of text. */
+const untitledTask = (title: string): Task => ({
+	id: "",
+	title,
+	status: "todo",
+	priority: "medium",
+	tags: [],
+});
+
+/** The text after a task line's checkbox. */
+const bodyOf = (taskLine: string): string =>
+	TaskRegularExpressions.taskRegex.exec(taskLine)?.[4] ?? "";
 
 /**
  * Joins a rule v0.8.0 split over `taskLine` ("🔁 DTSTART:…") and the line
@@ -216,19 +237,13 @@ export function repairSplitRule(
 	if (body === undefined || !ruleLine?.[1]) {
 		return undefined;
 	}
-	const read = parseTasksFormatItem({
-		id: "",
-		title: body,
-		status: "todo",
-		priority: "medium",
-		tags: [],
-	});
+	const read = parseTasksFormatItem(untitledTask(body));
 	const original = read.recurringInterval;
 	if (!original?.startsWith("DTSTART")) {
 		return undefined;
 	}
 	// A task v0.8.0 saved again: its start date is in the title.
-	const left = original === "DTSTART" ? leftStartDate(read.title) : undefined;
+	const left = original === "DTSTART" ? leftStartDate(read) : undefined;
 	try {
 		if (original === "DTSTART" && !left) {
 			throw new RepairError(
@@ -260,50 +275,143 @@ export function repairSplitRule(
 		};
 	} catch (error) {
 		if (!(error instanceof RepairError)) throw error;
-		const removeLeft = left ? `remove "${left}" from the title, ` : "";
-		throw new Error(
-			`Cannot repair the recurrence rule v0.8.0 split over two lines ("🔁 ${original}" and "RRULE:${ruleLine[1]}"): ${error.message}. Edit the note: delete the "RRULE:" line below the task, ${removeLeft}and replace "🔁 ${original}" with the rule as Obsidian Tasks text, such as "🔁 every week".`,
+		throw new UnrepairableRuleError(
+			`Cannot repair the recurrence rule v0.8.0 split over two lines ("🔁 ${original}" and "RRULE:${ruleLine[1]}"): ${error.message}. ${manualFix(original, left, 'the rule as Obsidian Tasks text, such as "🔁 every week"')}`,
 		);
 	}
 }
 
+/** How to join a split rule by editing the note. */
+function manualFix(
+	original: string,
+	left: string | undefined,
+	replacement: string,
+): string {
+	const removeLeft = left ? `remove "${left}" from the title, ` : "";
+	return `Edit the note: delete the "RRULE:" line below the task, ${removeLeft}and replace "🔁 ${original}" with ${replacement}.`;
+}
+
 /**
- * The task to write onto a repaired line: with the joined rule when it
- * still has the rule as read from the split line (a read that could not see
- * the rule's second line), else as it is; and without the start date
- * v0.8.0 left in its title.
+ * Why a task whose rule still reads as the "DTSTART…" part of a split rule
+ * can't be completed, and how to fix the note: the joined rule to write
+ * (the task was read without the "RRULE:" line, which Obsidian indexed
+ * apart from it), or why the rule can't be joined.
+ *
+ * @returns undefined when the lines hold no split rule
  */
-export function withRepairedRule(
-	task: Task,
-	repair: SplitRuleRepair | undefined,
-): Task {
+export function splitRuleFix(
+	taskLine: string,
+	nextLine: string | undefined,
+): string | undefined {
+	let repair: SplitRuleRepair | undefined;
+	try {
+		repair = repairSplitRule(taskLine, nextLine);
+	} catch (error) {
+		// The rule can't be joined: the error is the manual fix.
+		if (!(error instanceof UnrepairableRuleError)) throw error;
+		return error.message;
+	}
 	if (!repair) {
-		return task;
+		return undefined;
 	}
-	const titled = repair.titleFragment
-		? { ...task, title: withoutFragment(task.title, repair.titleFragment).trim() }
-		: task;
-	if (task.recurringInterval !== repair.original) {
-		return titled;
-	}
-	return {
-		...titled,
-		isRecurring: true,
-		recurringInterval: repair.rule,
-		startAt: task.startAt ?? repair.startAt,
+	const rrule = RULE_LINE.exec(nextLine ?? "")?.[1] ?? "";
+	const start = repair.startAt ? ` 🛫 ${repair.startAt}` : "";
+	return `Cannot read the recurrence rule v0.8.0 split over two lines ("🔁 ${repair.original}" and "RRULE:${rrule}"): Obsidian indexed the task without the "RRULE:" line. ${manualFix(repair.original, repair.titleFragment, `"🔁 ${repair.rule}${start}"`)} Or change the task once (in the timeline or with update_task), which joins the two lines.`;
+}
+
+/** Task fields a task line holds, other than its title and checkbox. */
+const SKIPPED_FIELDS = new Set(["id", "title", "status", "tags", "extra"]);
+
+const same = (a: unknown, b: unknown): boolean =>
+	JSON.stringify(a) === JSON.stringify(b);
+
+/** `record` without the keys whose value is undefined. */
+function defined<T extends object>(record: T): T {
+	return Object.fromEntries(
+		Object.entries(record).filter(([, value]) => value !== undefined),
+	) as T;
+}
+
+/**
+ * The task read from a line with a split rule, `splitLine`, and maybe edited
+ * since, as it reads from the line the rule is joined into: with the joined
+ * rule, without the start date v0.8.0 left in its title, and with what that
+ * start date kept the line's parser from reading as fields (the priority,
+ * dates or other fields v0.8.0 wrote before it) read as fields.
+ *
+ * Each field the task still has as read from `splitLine` takes its value
+ * from the joined line (or from the title, when the title still holds it,
+ * e.g. after a rename), and each field the task changed keeps the change.
+ */
+export function asReadFromRepairedLine(
+	task: Task,
+	splitLine: string,
+	repair: SplitRuleRepair,
+): Task {
+	const splitRead = parseTasksFormatItem(untitledTask(bodyOf(splitLine)));
+	const lineRead = parseTasksFormatItem(untitledTask(bodyOf(repair.line)));
+	const shownTitle = repair.titleFragment
+		? withoutFragment(task.title, repair.titleFragment).trim()
+		: task.title;
+	// Fields still in the title, read as a title without them reads.
+	const typed = parseTasksFormatItem(untitledTask(shownTitle));
+	const untyped = parseTasksFormatItem(untitledTask(typed.title));
+	const lineValue = (key: string) => {
+		const field = key as keyof Task;
+		return same(typed[field], untyped[field]) ? lineRead[field] : typed[field];
 	};
+
+	const keys = new Set(
+		[...Object.keys(splitRead), ...Object.keys(lineRead)].filter(
+			(key) => !SKIPPED_FIELDS.has(key),
+		),
+	);
+	const fields = Object.fromEntries(
+		[...keys].map((key) => {
+			const value = task[key as keyof Task];
+			const unchanged = same(value, splitRead[key as keyof Task]);
+			return [key, unchanged ? lineValue(key) : value];
+		}),
+	);
+	const extraKeys = new Set([
+		...Object.keys(splitRead.extra ?? {}),
+		...Object.keys(lineRead.extra ?? {}),
+	]);
+	const extra = Object.fromEntries(
+		[...extraKeys].map((key) => {
+			const value = task.extra?.[key];
+			const unchanged = same(value, splitRead.extra?.[key]);
+			return [key, unchanged ? lineRead.extra?.[key] : value];
+		}),
+	);
+	return defined({
+		...task,
+		...fields,
+		title: typed.title,
+		extra: defined({ ...task.extra, ...extra }),
+	} as Task);
+}
+
+/**
+ * Whether a task read from `rawText` was read with its split rule's second
+ * line, so its rule is joined already (see {@link withJoinedSplitRule}).
+ */
+export function readWithRuleLine(rawText: string): boolean {
+	const [, next = ""] = rawText.split("\n");
+	return RULE_LINE.test(next);
 }
 
 /**
  * A task read from the vault with its split rule joined, so the timeline,
- * the agent and complete_task see the rule it stands for. The note changes
- * only when the task is saved. A rule that can't be joined is left as read:
- * saving the task then fails with the manual fix.
+ * the agent and complete_task see the task the joined line holds. The note
+ * changes only when the task is saved. A rule that can't be joined is left
+ * as read: saving the task then fails with the manual fix.
  */
 export function withJoinedSplitRule(task: Task): Task {
 	const [line = "", next] = (task.extra?.rawText ?? "").split("\n");
 	try {
-		return withRepairedRule(task, repairSplitRule(line, next));
+		const repair = repairSplitRule(line, next);
+		return repair ? asReadFromRepairedLine(task, line, repair) : task;
 	} catch (error) {
 		console.warn(error);
 		return task;

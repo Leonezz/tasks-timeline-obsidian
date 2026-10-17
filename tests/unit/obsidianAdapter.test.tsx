@@ -10,6 +10,7 @@ import {
 	indexFile,
 	indexFileWithSplitRules,
 } from "../helpers/testHelpers";
+import { RESAVED_SPLIT_RULES, RULE_LINE } from "../fixtures/v080SplitRules";
 
 interface CapturedAppProps {
 	tasks: Task[];
@@ -357,6 +358,40 @@ describe("ObsidianAdaptor task handlers", () => {
 
 			await expect(app.vault.cachedRead(file)).resolves.toBe(
 				"- [x] Report 📅 2026-10-16 🔁 every week on Friday ✅ 2026-10-17\n",
+			);
+			expect(noticeSpy).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("with a rule v0.8.0 split and saved again, with a priority in the title", () => {
+		const RESAVED = `${RESAVED_SPLIT_RULES[0]!.line}\n${RULE_LINE}\n`;
+
+		it("shows the priority and leaves the note alone on a no-op save", async () => {
+			const { app, file, previous } = await renderAdaptor(
+				RESAVED,
+				indexFileWithSplitRules,
+			);
+
+			await mockAppProps!.onTaskUpdated({ ...previous }, previous);
+
+			expect(previous).toMatchObject({ title: "Report", priority: "high" });
+			await expect(app.vault.cachedRead(file)).resolves.toBe(RESAVED);
+			expect(noticeSpy).not.toHaveBeenCalled();
+		});
+
+		it("unticks it onto the joined line, keeping the priority", async () => {
+			const { app, file, previous } = await renderAdaptor(
+				RESAVED,
+				indexFileWithSplitRules,
+			);
+
+			await mockAppProps!.onTaskUpdated(
+				{ ...previous, status: "todo", completedAt: undefined },
+				previous,
+			);
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"- [ ] Report ⏫ 📅 2026-10-16 🔁 every week on Friday\n",
 			);
 			expect(noticeSpy).not.toHaveBeenCalled();
 		});
