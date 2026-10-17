@@ -602,6 +602,11 @@ describe("ObsidianTasksRepo deleting a task with sub-tasks", () => {
 		["a description and a sub-task", "- [ ] Parent\n\tNotes\n\t- [ ] Child\n", "Tasks.md:0:0"],
 		["a plain sub-bullet", "- [ ] Parent\n\t- A note\n", "Tasks.md:0:0"],
 		["a blank line before the sub-task", "- [ ] Parent\n\n\t- [ ] Child\n", "Tasks.md:0:0"],
+		[
+			"a paragraph before the sub-task",
+			"- [ ] Parent\n\n\tSome notes\n\n\t- [ ] Child\n",
+			"Tasks.md:0:0",
+		],
 	])("refuses when it has nested items (%s)", async (_kind, content, id) => {
 		const { app, file, repo } = createRepo(content);
 		await repo.loadTasks();

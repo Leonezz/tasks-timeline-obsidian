@@ -184,6 +184,9 @@ function lineShape(line: string): {
  * lines end before `after`. Removing the task would leave them indented
  * under nothing, which Obsidian reads as a code block or paragraph text, so
  * they would drop off the timeline.
+ *
+ * Looks through everything indented under the task (blank lines and
+ * paragraphs included), up to the first line that is not.
  */
 export function hasNestedItems(
 	lines: readonly string[],
@@ -191,16 +194,14 @@ export function hasNestedItems(
 	after: number,
 ): boolean {
 	const task = lineShape(lines[taskLine] ?? "");
-	const next = lines
-		.slice(after)
-		.map(lineShape)
-		.find((shape) => shape.text.trim() !== "");
-	return (
-		next !== undefined &&
-		next.quoteDepth === task.quoteDepth &&
-		next.indent > task.indent &&
-		LIST_ITEM.test(next.text)
-	);
+	for (const shape of lines.slice(after).map(lineShape)) {
+		if (shape.text.trim() === "") continue;
+		if (shape.quoteDepth !== task.quoteDepth || shape.indent <= task.indent) {
+			return false;
+		}
+		if (LIST_ITEM.test(shape.text)) return true;
+	}
+	return false;
 }
 
 /** The task an id names changed since the id was handed out. */
