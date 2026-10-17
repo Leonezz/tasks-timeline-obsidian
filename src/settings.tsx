@@ -1,5 +1,6 @@
 import {
 	App,
+	Notice,
 	PluginSettingTab,
 } from "obsidian";
 import TasksTimelineObsidianPlugin from "./main";
@@ -14,7 +15,7 @@ import {
 	SecretFieldContext,
 	SettingsPage,
 } from "@tasks-timeline/components";
-import { unmountReactRoot } from "./view";
+import { TimelineErrorBoundary, unmountReactRoot } from "./view";
 import type { StatsData } from "./mcpStats";
 import type { SessionSummary } from "./mcpServer";
 import { getActiveWindow } from "./obsidianDom";
@@ -129,9 +130,13 @@ export const DEFAULT_SETTINGS: TasksTimelinePluginSettings = {
  * re-renders when onUpdateSettings is called.  Without this, the
  * Obsidian PluginSettingTab passes a static reference that never
  * triggers a React re-render.
+ *
+ * Initial settings come from a getter read on mount, so a remount (the error
+ * boundary's "Try Again") starts from the latest saved settings instead of
+ * the ones captured when the tab was displayed.
  */
 function SettingsPageWrapper({
-	initialSettings,
+	getInitialSettings,
 	onPersistSettings,
 	availableCategories,
 	availableTags,
@@ -139,7 +144,7 @@ function SettingsPageWrapper({
 	customTabs,
 	renderSecretField,
 }: {
-	initialSettings: AppSettings;
+	getInitialSettings: () => AppSettings;
 	onPersistSettings: (s: AppSettings) => void;
 	availableCategories: string[];
 	availableTags: string[];
@@ -147,7 +152,7 @@ function SettingsPageWrapper({
 	customTabs: CustomSettingsTab[];
 	renderSecretField: (context: SecretFieldContext) => React.ReactNode;
 }) {
-	const [settings, setSettings] = useState(initialSettings);
+	const [settings, setSettings] = useState(getInitialSettings);
 
 	const handleUpdateSettings = (s: AppSettings) => {
 		setSettings(s);
@@ -610,6 +615,8 @@ function McpServerSettings({
 export class TasksTimelineSettingTab extends PluginSettingTab {
 	plugin: TasksTimelineObsidianPlugin;
 	private root: ReactRoot | undefined;
+	/** Set while saves keep failing, so a failure streak shows one notice. */
+	private settingsSaveFailing = false;
 
 	constructor(app: App, plugin: TasksTimelineObsidianPlugin) {
 		super(app, plugin);
@@ -624,7 +631,49 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 		host?.shadowRoot?.replaceChildren();
 	}
 
+	/** Saves settings, reporting a failure once per failure streak. */
+	private saveSettingsReporting(): Promise<void> {
+		return this.plugin.saveSettings().then(
+			() => {
+				this.settingsSaveFailing = false;
+			},
+			(error: unknown) => {
+				console.error("Failed to save settings:", error);
+				if (this.settingsSaveFailing) {
+					return;
+				}
+				this.settingsSaveFailing = true;
+				new Notice(
+					error instanceof Error
+						? `Failed to save settings: ${error.message}`
+						: "Failed to save settings.",
+				);
+			},
+		);
+	}
+
+	private async restartMcpServerReporting(): Promise<void> {
+		try {
+			await this.plugin.restartMcpServer();
+		} catch (error) {
+			console.error("Failed to restart the agent server:", error);
+			new Notice(
+				error instanceof Error
+					? `Failed to restart the agent server: ${error.message}`
+					: "Failed to restart the agent server.",
+			);
+		}
+	}
+
+	private persistAppSettings(settings: AppSettings): void {
+		this.plugin.settings.appSetting = settings;
+		void this.saveSettingsReporting();
+		this.plugin.bus.emit("settings:changed", {});
+	}
+
 	display(): void {
+		// SettingTab.update() can re-enter display() without hide().
+		this.root = unmountReactRoot(this.root);
 		const { containerEl } = this;
 		const container = containerEl;
 		container.empty();
@@ -677,33 +726,37 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 						this.plugin.settings.mcpServer.subscriptionsEnabled ??
 						false
 					}
+					// These run with `void` in the tab, so each one reports its
+					// own failures, and applies its change even if saving fails.
 					onToggle={async (value) => {
 						this.plugin.settings.mcpServer.enabled = value;
-						await this.plugin.saveSettings();
-						await this.plugin.restartMcpServer();
+						await this.saveSettingsReporting();
+						await this.restartMcpServerReporting();
 					}}
 					onHostChange={async (host) => {
 						this.plugin.settings.mcpServer.host = host;
-						await this.plugin.saveSettings();
+						await this.saveSettingsReporting();
 					}}
 					onPortChange={async (port) => {
 						this.plugin.settings.mcpServer.port = port;
-						await this.plugin.saveSettings();
+						await this.saveSettingsReporting();
 					}}
 					onAuthToggle={async (value) => {
 						this.plugin.settings.mcpServer.authEnabled = value;
-						await this.plugin.saveSettings();
+						await this.saveSettingsReporting();
 					}}
 					onBlacklistChange={async (value) => {
 						this.plugin.settings.mcpServer.blacklist = value;
-						await this.plugin.saveSettings();
+						// Block on the running server first: a failed save must
+						// not leave it serving what the user just blocked.
 						this.plugin.updateSecurityBlacklist(value);
+						await this.saveSettingsReporting();
 					}}
 					onSubscriptionsToggle={async (value) => {
 						this.plugin.settings.mcpServer.subscriptionsEnabled =
 							value;
-						await this.plugin.saveSettings();
-						await this.plugin.restartMcpServer();
+						await this.saveSettingsReporting();
+						await this.restartMcpServerReporting();
 					}}
 					getAuthToken={() => this.plugin.getAuthToken()}
 					regenerateToken={() => this.plugin.regenerateAuthToken()}
@@ -734,24 +787,22 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 		this.root = createRoot(rootEl);
 		this.root.render(
 			<React.StrictMode>
-				<SettingsPageWrapper
-					initialSettings={this.plugin.settings.appSetting}
-					onPersistSettings={(s) => {
-						this.plugin.settings.appSetting = s;
-						void this.plugin.saveSettings();
-						this.plugin.bus.emit("settings:changed", {});
-					}}
-					availableCategories={availableCategories}
-					availableTags={availableTags}
-					inDarkMode={this.plugin.settings.systemInDarkMode}
-					customTabs={[mcpTab]}
-					renderSecretField={(context) => (
-						<ObsidianSecretField
-							context={context}
-							plugin={this.plugin}
-						/>
-					)}
-				/>
+				<TimelineErrorBoundary>
+					<SettingsPageWrapper
+						getInitialSettings={() => this.plugin.settings.appSetting}
+						onPersistSettings={(s) => this.persistAppSettings(s)}
+						availableCategories={availableCategories}
+						availableTags={availableTags}
+						inDarkMode={this.plugin.settings.systemInDarkMode}
+						customTabs={[mcpTab]}
+						renderSecretField={(context) => (
+							<ObsidianSecretField
+								context={context}
+								plugin={this.plugin}
+							/>
+						)}
+					/>
+				</TimelineErrorBoundary>
 			</React.StrictMode>,
 		);
 

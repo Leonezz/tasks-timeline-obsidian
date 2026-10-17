@@ -241,31 +241,78 @@ export function createTestScenario(name: 'basic' | 'complex' | 'edge-cases'): Te
 	return vault;
 }
 
+/** A task line, optionally inside quotes/callouts (`> `) and indented. */
+const TASK_LINE = /^((?:> ?)*)([ \t]*)- \[([^\]])\] /;
+const LIST_ITEM = /^\s*([-*+]|\d+[.)])\s/;
+
+const indentWidth = (whitespace: string) =>
+	[...whitespace].reduce((width, c) => width + (c === "\t" ? 4 : 1), 0);
+
 /**
- * Builds Obsidian-like list item metadata for every top-level task line.
+ * A non-list line inside the same quote, indented deeper than the item,
+ * continues it (a description line).
+ */
+function continuesItem(
+	line: string | undefined,
+	quote: string,
+	indent: string,
+): boolean {
+	if (line === undefined || !line.startsWith(quote)) return false;
+	const rest = line.slice(quote.length);
+	const leading = rest.match(/^[ \t]*/)?.[0] ?? "";
+	return (
+		rest.trim() !== "" &&
+		indentWidth(leading) > indentWidth(indent) &&
+		!LIST_ITEM.test(rest)
+	);
+}
+
+/**
+ * Builds list item metadata for every task line, positioned like Obsidian's
+ * parser: the item starts after any `> ` prefix and indentation (start.col 2
+ * for `> - [ ]`, 1 for a tab-indented sub-task), and description lines
+ * indented below it extend the item's end.
  */
 export function createListItems(content: string): ListItemCache[] {
-	let offset = 0;
-	return content.split("\n").flatMap((line, lineNumber) => {
-		const startOffset = offset;
-		offset += line.length + 1;
+	const lines = content.split("\n");
+	const lineStarts = lines.reduce<number[]>(
+		(starts, line, index) => [
+			...starts,
+			index === 0 ? 0 : starts[index - 1]! + lines[index - 1]!.length + 1,
+		],
+		[],
+	);
 
-		if (!/^- \[[^\]]\] /.test(line)) {
+	return lines.flatMap((line, lineNumber) => {
+		const match = TASK_LINE.exec(line);
+		if (!match) {
 			return [];
 		}
+		const quote = match[1]!;
+		const indent = match[2]!;
+		const startCol = quote.length + indent.length;
+		let endLine = lineNumber;
+		while (continuesItem(lines[endLine + 1], quote, indent)) {
+			endLine++;
+		}
+		const endText = lines[endLine]!;
 
 		return [
 			{
 				position: {
-					start: { line: lineNumber, col: 0, offset: startOffset },
-					end: {
+					start: {
 						line: lineNumber,
-						col: line.length,
-						offset: startOffset + line.length,
+						col: startCol,
+						offset: lineStarts[lineNumber]! + startCol,
+					},
+					end: {
+						line: endLine,
+						col: endText.length,
+						offset: lineStarts[endLine]! + endText.length,
 					},
 				},
 				parent: -1,
-				task: line.slice(3, 4),
+				task: match[3]!,
 			},
 		];
 	});
@@ -281,6 +328,19 @@ export function indexFile(app: App, path: string, content: string) {
 		links: [],
 		tags: [],
 	});
+}
+
+/**
+ * Rewrites a file the way an edit outside the plugin does (the editor, or the
+ * Tasks plugin completing a recurring task): the write fires vault "modify",
+ * then Obsidian re-indexes the file and fires metadataCache "changed".
+ */
+export async function editExternally(app: App, path: string, content: string) {
+	const file = app.vault.getAbstractFileByPath(path);
+	if (!(file instanceof TFile)) throw new Error(`File not found: ${path}`);
+	await app.vault.modify(file, content);
+	indexFile(app, path, content);
+	app.metadataCache.trigger("changed", file);
 }
 
 /**

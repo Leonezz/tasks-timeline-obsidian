@@ -13,6 +13,27 @@ global.console = {
 	error: jest.fn(),
 };
 
+// Obsidian's global HTMLElement helpers used by views and setting tabs
+HTMLElement.prototype.empty = function (this: HTMLElement) {
+	this.replaceChildren();
+};
+HTMLElement.prototype.addClass = function (
+	this: HTMLElement,
+	...classes: string[]
+) {
+	this.classList.add(...classes);
+};
+HTMLElement.prototype.createDiv = function (
+	this: HTMLElement,
+	o?: DomElementInfo | string,
+) {
+	const div = document.createElement('div');
+	const cls = typeof o === 'string' ? o : o?.cls;
+	if (cls) div.className = Array.isArray(cls) ? cls.join(' ') : cls;
+	this.appendChild(div);
+	return div;
+};
+
 // Mock window.matchMedia for React components that use media queries
 Object.defineProperty(window, 'matchMedia', {
 	writable: true,

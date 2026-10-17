@@ -13,7 +13,12 @@ import {
 	useState,
 } from "react";
 import { ObsidianSettingRepo } from "./settingsRepo";
-import { ObsidianTasksRepo } from "./tasksRepo";
+import {
+	keepRecurrenceDroppedByModal,
+	ObsidianTasksRepo,
+	taskUpdateNeedsWrite,
+} from "./tasksRepo";
+import { isSameTaskLine, StaleTaskError } from "./taskLine";
 import { ObsidianSecretField } from "./secretField";
 import { createRenderTitle } from "./titleRenderer";
 import { App, debounce, Notice, Pos, requestUrl, TFile } from "obsidian";
@@ -30,6 +35,19 @@ const OBSIDIAN_AI_SYSTEM_PROMPT = `You are operating inside an Obsidian vault wh
 - When creating a task, choose the target category/file path that best matches the note or project the user is talking about. If the destination note is unclear, ask a short clarification instead of guessing.
 - When changing existing tasks, preserve vault-specific metadata and unrelated task fields. Use task IDs returned by query results rather than inventing IDs or relying only on title text.
 - If multiple tasks could match the user's intent, ask the user to choose or narrow the scope before destructive or bulk changes.`;
+
+/** The stale-id error tells AI clients to query again; users get this. */
+const STALE_TASK_IN_VIEW =
+	"this note changed in the editor; the timeline is refreshing — reopen the task and try again.";
+
+const describeFailure = (action: string, error: unknown): string => {
+	if (error instanceof StaleTaskError) {
+		return `Failed to ${action}: ${STALE_TASK_IN_VIEW}`;
+	}
+	return error instanceof Error
+		? `Failed to ${action}: ${error.message}`
+		: `Failed to ${action}.`;
+};
 
 const handleItemClick = (item: Task, app: App) => {
 	if (!item.extra?.file) {
@@ -204,7 +222,18 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 		};
 	}, [plugin]);
 
-	// Task CRUD handlers
+	// The task's note changed after the timeline loaded it: reload so the
+	// user can retry on current data.
+	const refreshAfterStale = (error: unknown, task: Task) => {
+		if (!(error instanceof StaleTaskError)) return;
+		if (task.extra?.file) {
+			stableTasksRepo.current.invalidateFile(task.extra.file);
+		}
+		void loadTasks();
+	};
+
+	// Task CRUD handlers. Each rethrows after notifying so its caller (the
+	// timeline UI or an AI tool) reports the failure instead of success.
 	const handleTaskAdded = async (task: Task): Promise<Task> => {
 		try {
 			const stored = await stableTasksRepo.current.addTask(task);
@@ -217,37 +246,42 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			return stored;
 		} catch (error) {
 			console.error("Failed to add task:", error);
-			new Notice(
-				error instanceof Error
-					? `Failed to add task: ${error.message}`
-					: "Failed to add task.",
-			);
-			// Rethrow so the AI create_task tool reports the failure.
+			new Notice(describeFailure("add task", error));
 			throw error;
 		}
 	};
 
 	const handleTaskUpdated = async (task: Task, previous: Task) => {
-		// Skip update if nothing actually changed
-		if (
-			task.title === previous.title &&
-			task.status === previous.status &&
-			task.priority === previous.priority &&
-			task.dueAt === previous.dueAt &&
-			task.completedAt === previous.completedAt &&
-			task.startAt === previous.startAt &&
-			task.createdAt === previous.createdAt
-		) {
-			return;
-		}
-
 		try {
-			await stableTasksRepo.current.updateTask(task);
-			// Update local state only after successful save
-			setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+			// An editor opened before a reload saves a copy of what the id
+			// named then; `previous` is what it names now. Refuse before
+			// anything (like the 🔁 shim) mixes the two tasks.
+			const copyLine = task.extra?.rawText;
+			const currentLine = previous.extra?.rawText;
+			if (copyLine && currentLine && !isSameTaskLine(copyLine, currentLine)) {
+				throw new StaleTaskError(task.id);
+			}
+			const incoming = keepRecurrenceDroppedByModal(task, previous);
+			if (!taskUpdateNeedsWrite(incoming, previous)) {
+				return;
+			}
+			const storedText =
+				await stableTasksRepo.current.writeTaskLine(incoming);
+			// Update local state only after successful save, with the line as
+			// now written: an editor opened from this copy before the reload
+			// must still match the reloaded task.
+			const stored = {
+				...incoming,
+				extra: { ...incoming.extra, rawText: storedText },
+			};
+			setTasks((prev) =>
+				prev.map((t) => (t.id === stored.id ? stored : t)),
+			);
 		} catch (error) {
 			console.error("Failed to update task:", error);
-			new Notice("Failed to update task. Changes not saved.");
+			new Notice(describeFailure("update task", error));
+			refreshAfterStale(error, previous);
+			throw error;
 		}
 	};
 
@@ -258,7 +292,9 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			setTasks((prev) => prev.filter((t) => t.id !== taskId));
 		} catch (error) {
 			console.error("Failed to delete task:", error);
-			new Notice("Failed to delete task.");
+			new Notice(describeFailure("delete task", error));
+			refreshAfterStale(error, previous);
+			throw error;
 		}
 	};
 

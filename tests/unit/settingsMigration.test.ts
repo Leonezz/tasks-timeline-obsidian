@@ -1,6 +1,7 @@
 import type { AppSettings } from "@tasks-timeline/components";
 import {
 	deepMergeSettings,
+	migrateFiltersToFilterRule,
 	migrateV1ToV2,
 	migrateSettings,
 } from "../../src/settingsMigration";
@@ -41,10 +42,10 @@ const defaultAppSetting: AppSettings = {
 	tokenUsageByModel: {},
 	defaultCategory: "",
 	filters: {
-		tags: [],
-		categories: [],
-		priorities: [],
-		statuses: [],
+		tags: { include: [], exclude: [] },
+		categories: { include: [], exclude: [] },
+		priorities: { include: [], exclude: [] },
+		statuses: { include: [], exclude: [] },
 		enableScript: false,
 		script: "",
 	},
@@ -77,6 +78,7 @@ describe("deepMergeSettings", () => {
 				enabled: false,
 				defaultMode: true,
 				activeProvider: "openai",
+				systemPrompt: "",
 				providers: {
 					gemini: { apiKey: "my-key", baseUrl: "", model: "" },
 					anthropic: { apiKey: "", baseUrl: "", model: "" },
@@ -162,6 +164,43 @@ describe("migrateV1ToV2", () => {
 		const first = migrateV1ToV2(defaultAppSetting);
 		const second = migrateV1ToV2(first);
 		expect(second).toEqual(first);
+	});
+});
+
+describe("migrateFiltersToFilterRule", () => {
+	it("converts legacy flat-array filters to FilterRule", () => {
+		const legacy = {
+			...defaultAppSetting,
+			filters: {
+				...defaultAppSetting.filters,
+				tags: ["work"],
+				categories: ["home"],
+				priorities: ["high"],
+				statuses: ["todo"],
+			},
+		} as unknown as AppSettings;
+
+		const result = migrateFiltersToFilterRule(legacy);
+
+		expect(result.filters.tags).toEqual({ include: ["work"], exclude: [] });
+		expect(result.filters.categories).toEqual({
+			include: ["home"],
+			exclude: [],
+		});
+		expect(result.filters.priorities).toEqual({
+			include: ["high"],
+			exclude: [],
+		});
+		expect(result.filters.statuses).toEqual({
+			include: ["todo"],
+			exclude: [],
+		});
+	});
+
+	it("returns already-migrated settings unchanged", () => {
+		expect(migrateFiltersToFilterRule(defaultAppSetting)).toBe(
+			defaultAppSetting
+		);
 	});
 });
 

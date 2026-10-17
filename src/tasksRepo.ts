@@ -5,6 +5,7 @@ import {
 	Notice,
 	Pos,
 	SectionCache,
+	TAbstractFile,
 	TagCache,
 	TFile,
 } from "obsidian";
@@ -18,6 +19,17 @@ import {
 import TasksTimelineObsidianPlugin from "./main";
 import { Link } from "./link";
 import {
+	filePathOfTaskId,
+	hasNestedItems,
+	isSameTaskLine,
+	locateTaskBlock,
+	locateTaskLine,
+	snapshotOf,
+	StaleTaskError,
+	storedLineText,
+	TaskSnapshot,
+} from "./taskLine";
+import {
 	getTaskStatusFromMarker,
 	parseTasksFormatItem,
 	Task,
@@ -29,14 +41,114 @@ import {
 /** How long addTask waits for Obsidian to index the line it appended. */
 const ADDED_TASK_INDEX_TIMEOUT_MS = 5000;
 
+/** How long a read waits for Obsidian to re-index a note that was modified. */
+const REINDEX_TIMEOUT_MS = 3000;
+
+/**
+ * Task fields that `updateTask` cannot persist: it only rewrites the task's
+ * own line, which holds neither a description nor the note it lives in.
+ */
+const LINE_UNSTORABLE_FIELDS = ["description", "category"] as const;
+
+const tagKey = (name: string) => name.replace(/^#/, "");
+
+function frontmatterTagsOf(task: Task): string[] {
+	try {
+		const parsed: unknown = JSON.parse(task.extra?.frontmatterTags ?? "[]");
+		return Array.isArray(parsed)
+			? parsed.filter((tag): tag is string => typeof tag === "string")
+			: [];
+	} catch (error) {
+		console.warn("Failed to parse frontmatter tags", error);
+		return [];
+	}
+}
+
+/**
+ * Changes the vault line cannot store: description and category, and
+ * removing a tag the task gets from its note's frontmatter (the line would
+ * stay the same and the tag would come back on the next read).
+ */
+function unstorableChanges(task: Task, previous: Task): string[] {
+	const fields = LINE_UNSTORABLE_FIELDS.filter(
+		(field) => (task[field] ?? "").trim() !== (previous[field] ?? "").trim(),
+	);
+	const kept = new Set(task.tags.map((tag) => tagKey(tag.name)));
+	const removedFrontmatterTags = frontmatterTagsOf(previous)
+		.filter((tag) => !kept.has(tagKey(tag)))
+		.map((tag) => `frontmatter tag ${tag}`);
+	return [...fields, ...removedFrontmatterTags];
+}
+
+/**
+ * Decides whether an edit of a vault task needs a write.
+ *
+ * Both versions are serialized onto the stored line, so only changes the line
+ * can hold count, and a no-op edit (e.g. leaving inline edit mode) neither
+ * rewrites nor reformats the line.
+ *
+ * @returns false when nothing changed; true when the serialized line changes,
+ * or when the stored line is unknown (`updateTask` then locates it itself).
+ * @throws when the edit changes anything the vault line cannot store, even
+ * alongside changes it can: saving only part of an edit would drop the rest
+ * without a word.
+ */
+export function taskUpdateNeedsWrite(task: Task, previous: Task): boolean {
+	const unstorable = unstorableChanges(task, previous);
+	if (unstorable.length > 0) {
+		const frontmatterHint = unstorable.some((change) =>
+			change.startsWith("frontmatter tag"),
+		)
+			? " Frontmatter tags are changed in the note's frontmatter."
+			: "";
+		throw new Error(
+			`Cannot update task: ${unstorable.join(" and ")} cannot be stored in the vault line. Only the task line (title, status, priority, dates, tags, recurrence) is saved.${frontmatterHint}`,
+		);
+	}
+	const rawText = previous.extra?.rawText;
+	if (!rawText) {
+		return true;
+	}
+	return taskToMarkdown(task, rawText) !== taskToMarkdown(previous, rawText);
+}
+
+/**
+ * Compatibility shim for @tasks-timeline/components <= v0.8.0, whose edit
+ * modal saves `recurringInterval: undefined` unless its recurrence switch was
+ * touched. Tasks read from the vault carry their 🔁 rule in
+ * `recurringInterval` but never set `isRecurring`, so every modal save would
+ * erase the rule from the note.
+ *
+ * Keeps the previous rule when the incoming task has none and no
+ * `isRecurring` key at all, which only that untouched switch produces.
+ * Explicit removal still clears it: the switch turned off sets
+ * `isRecurring: false`, and the AI tools set the `isRecurring` key when they
+ * clear a recurrence. Newer modals return the rule unchanged, so this then
+ * does nothing.
+ */
+export function keepRecurrenceDroppedByModal(task: Task, previous: Task): Task {
+	const dropped =
+		previous.recurringInterval !== undefined &&
+		task.recurringInterval === undefined &&
+		!("isRecurring" in task);
+	return dropped
+		? { ...task, recurringInterval: previous.recurringInterval }
+		: task;
+}
+
 export class ObsidianTasksRepo implements TaskRepository {
 	name: string = "Obsidian Notes";
 	plugin: TasksTimelineObsidianPlugin;
-	private taskCache = new Map<
-		string,
-		{ file: string; rawText: string; position: string }
-	>();
+	/** Task lines as last handed out, by id. Writes check them for staleness. */
+	private taskCache = new Map<string, TaskSnapshot>();
 	private fileTaskCache = new Map<string, Task[]>();
+	/** Bumped on invalidation so a read that started earlier is not cached. */
+	private fileGenerations = new Map<string, number>();
+	/** Notes modified but not yet re-indexed; reads wait for the re-index. */
+	private pendingReindex = new Map<
+		string,
+		{ done: Promise<void>; finish: () => void }
+	>();
 
 	constructor(plugin: TasksTimelineObsidianPlugin) {
 		this.plugin = plugin;
@@ -44,73 +156,90 @@ export class ObsidianTasksRepo implements TaskRepository {
 
 	invalidateFile(path: string) {
 		this.fileTaskCache.delete(path);
+		const generation = this.fileGenerations.get(path) ?? 0;
+		this.fileGenerations.set(path, generation + 1);
+	}
+
+	/**
+	 * Keeps cached tasks in step with the vault, for consumers that do not
+	 * reload on vault events themselves (the MCP server). A modified note is
+	 * read only after Obsidian re-indexes it ("changed"): before that its new
+	 * content does not match the list item positions in the metadata cache.
+	 *
+	 * @returns a function that removes the listeners
+	 */
+	watchVault(): () => void {
+		const { vault, metadataCache } = this.plugin.app;
+		const isNote = (file: TAbstractFile): file is TFile =>
+			file instanceof TFile && file.extension === "md";
+
+		const vaultRefs = [
+			vault.on("modify", (file) => {
+				if (!isNote(file)) return;
+				this.invalidateFile(file.path);
+				this.expectReindex(file.path);
+			}),
+			vault.on("delete", (file) => this.invalidateFile(file.path)),
+			vault.on("rename", (file, oldPath) => {
+				this.invalidateFile(oldPath);
+				this.invalidateFile(file.path);
+			}),
+		];
+		const changedRef = metadataCache.on("changed", (file) => {
+			this.invalidateFile(file.path);
+			this.finishReindex(file.path);
+		});
+
+		return () => {
+			vaultRefs.forEach((ref) => vault.offref(ref));
+			metadataCache.offref(changedRef);
+			[...this.pendingReindex.keys()].forEach((path) =>
+				this.finishReindex(path),
+			);
+		};
+	}
+
+	private expectReindex(path: string): void {
+		if (this.pendingReindex.has(path)) return;
+		let resolve: () => void = () => undefined;
+		const done = new Promise<void>((r) => {
+			resolve = r;
+		});
+		const timer = window.setTimeout(() => {
+			console.warn(
+				`Obsidian did not re-index ${path} within ${REINDEX_TIMEOUT_MS / 1000}s; reading it anyway.`,
+			);
+			this.finishReindex(path);
+		}, REINDEX_TIMEOUT_MS);
+		this.pendingReindex.set(path, {
+			done,
+			finish: () => {
+				window.clearTimeout(timer);
+				resolve();
+			},
+		});
+	}
+
+	private finishReindex(path: string): void {
+		const pending = this.pendingReindex.get(path);
+		this.pendingReindex.delete(path);
+		pending?.finish();
 	}
 
 	async loadTasks(): Promise<Task[]> {
-		// We rebuild the taskCache from fileTaskCache to ensure ID consistency.
-		this.taskCache.clear();
-
 		const files = this.plugin.app.vault.getMarkdownFiles();
 		const failedFiles: string[] = [];
-		const allItems = files.map(async (file) => {
-			if (this.fileTaskCache.has(file.path)) {
-				return this.fileTaskCache.get(file.path)!;
-			}
-
-			const link = Link.file(file.path);
-			try {
-				const content = await this.plugin.app.vault.cachedRead(file);
-				const cache = this.plugin.app.metadataCache.getFileCache(file);
-				const tasks =
-					cache?.listItems
-						?.map(
-							this.fromItemCache(
-								link,
-								file.path,
-								content,
-								cache.sections,
-								cache.links,
-								cache.frontmatter,
-								cache.tags,
-							),
-						)
-						.filter((item): item is Task => !!item) || [];
-
-				// Process tasks
-				const processedTasks = tasks
-					.map(parseTasksFormatItem)
-					.map(parseDataViewFormatItem)
-					.map(dailyNoteTaskParser())
-					.map(remainderParser)
-					.map(tagsParser)
-					.map(markerBasedStatusParser)
-					// Ensure tags is always an array (defensive)
-					.map((task) => ({
-						...task,
-						tags: task.tags || [],
-					}))
-					.map((task) => {
-						const seen = new Set<string>();
-						return {
-							...task,
-							tags: task.tags.filter((tag) => {
-								if (seen.has(tag.name)) return false;
-								seen.add(tag.name);
-								return true;
-							}),
-						};
-					});
-
-				this.fileTaskCache.set(file.path, processedTasks);
-				return processedTasks;
-			} catch (reason) {
-				console.error(`Read file ${file.path} failed:`, reason);
-				failedFiles.push(file.path);
-				return [] as Task[];
-			}
-		});
-
-		const results = await Promise.all(allItems);
+		const results = await Promise.all(
+			files.map(async (file) => {
+				try {
+					return await this.readFileTasks(file);
+				} catch (reason) {
+					console.error(`Read file ${file.path} failed:`, reason);
+					failedFiles.push(file.path);
+					return [] as Task[];
+				}
+			}),
+		);
 		const flattenedTasks = results.flat();
 
 		// Notify user if some files couldn't be read
@@ -121,18 +250,111 @@ export class ObsidianTasksRepo implements TaskRepository {
 			console.warn("Failed to read files:", failedFiles);
 		}
 
-		// Populate ID cache
+		// Swap the id snapshot in one step, so lookups during a load still
+		// see the previous one instead of an empty cache.
+		const snapshots = new Map<string, TaskSnapshot>();
 		flattenedTasks.forEach((task) => {
-			if (task.extra?.file && task.extra?.rawText) {
-				this.taskCache.set(task.id, {
-					file: task.extra.file,
-					rawText: task.extra.rawText,
-					position: task.extra.position || "",
-				});
-			}
+			const snapshot = snapshotOf(task);
+			if (snapshot) snapshots.set(task.id, snapshot);
 		});
+		this.taskCache = snapshots;
 
 		return flattenedTasks;
+	}
+
+	/**
+	 * Re-reads a task's note and returns the task as it is now.
+	 *
+	 * Ids are line positions, so after a note changes an id can name a
+	 * different task. When `id` was handed out before and its line has changed
+	 * since, this throws instead of returning whatever task sits there now.
+	 *
+	 * @returns null when no task has this id
+	 */
+	async getTask(id: string): Promise<Task | null> {
+		const snapshot = this.taskCache.get(id);
+		const path = snapshot?.file ?? filePathOfTaskId(id);
+		const file = path
+			? this.plugin.app.vault.getAbstractFileByPath(path)
+			: null;
+		let current: Task | undefined;
+		if (file instanceof TFile) {
+			this.invalidateFile(file.path);
+			const tasks = await this.readFileTasks(file);
+			current = tasks.find((t) => t.id === id);
+		}
+
+		const currentLine = current?.extra?.rawText;
+		const unchanged =
+			currentLine !== undefined &&
+			snapshot !== undefined &&
+			isSameTaskLine(currentLine, snapshot.rawText);
+		if (snapshot && !unchanged) {
+			throw new StaleTaskError(id);
+		}
+		if (!current) {
+			return null;
+		}
+		const currentSnapshot = snapshotOf(current);
+		if (currentSnapshot) this.taskCache.set(id, currentSnapshot);
+		return current;
+	}
+
+	/** Parses a note's tasks, from the file cache while it is still valid. */
+	private async readFileTasks(file: TFile): Promise<Task[]> {
+		await this.pendingReindex.get(file.path)?.done;
+		const cachedTasks = this.fileTaskCache.get(file.path);
+		if (cachedTasks) {
+			return cachedTasks;
+		}
+
+		const generation = this.fileGenerations.get(file.path) ?? 0;
+		const content = await this.plugin.app.vault.cachedRead(file);
+		const cache = this.plugin.app.metadataCache.getFileCache(file);
+		const tasks =
+			cache?.listItems
+				?.map(
+					this.fromItemCache(
+						Link.file(file.path),
+						file.path,
+						content,
+						cache.sections,
+						cache.links,
+						cache.frontmatter,
+						cache.tags,
+					),
+				)
+				.filter((item): item is Task => !!item) || [];
+
+		const processedTasks = tasks
+			.map(parseTasksFormatItem)
+			.map(parseDataViewFormatItem)
+			.map(dailyNoteTaskParser())
+			.map(remainderParser)
+			.map(tagsParser)
+			.map(markerBasedStatusParser)
+			// Ensure tags is always an array (defensive)
+			.map((task) => ({
+				...task,
+				tags: task.tags || [],
+			}))
+			.map((task) => {
+				const seen = new Set<string>();
+				return {
+					...task,
+					tags: task.tags.filter((tag) => {
+						if (seen.has(tag.name)) return false;
+						seen.add(tag.name);
+						return true;
+					}),
+				};
+			});
+
+		// A read the note changed during is returned but not cached.
+		if ((this.fileGenerations.get(file.path) ?? 0) === generation) {
+			this.fileTaskCache.set(file.path, processedTasks);
+		}
+		return processedTasks;
 	}
 
 	/**
@@ -196,7 +418,9 @@ export class ObsidianTasksRepo implements TaskRepository {
 		await this.waitForTaskItem(file, line);
 		this.invalidateFile(file.path);
 
-		const tasks = await this.loadTasks();
+		// Read only this note: a full load would also replace the snapshots
+		// of tasks the caller has not re-read, hiding their staleness.
+		const tasks = await this.readFileTasks(file);
 		const stored = tasks.find(
 			(t) =>
 				t.extra?.file === file.path &&
@@ -208,6 +432,8 @@ export class ObsidianTasksRepo implements TaskRepository {
 				`Task was written to ${file.path} (line ${line + 1}) but could not be read back as a task. List tasks to find its id before changing it.`,
 			);
 		}
+		const snapshot = snapshotOf(stored);
+		if (snapshot) this.taskCache.set(stored.id, snapshot);
 		return stored;
 	}
 
@@ -247,10 +473,23 @@ export class ObsidianTasksRepo implements TaskRepository {
 		return Promise.resolve();
 	}
 
+	/** See {@link writeTaskLine}. */
 	async updateTask(task: Task): Promise<void> {
-		// Get cached data - the UI component might not preserve extra fields
-		const cached = this.taskCache.get(task.id);
-		const filePath = task.extra?.file || cached?.file;
+		await this.writeTaskLine(task);
+	}
+
+	/**
+	 * Rewrites a task's line. The line must still hold the text this
+	 * repository last handed out for the id (or have moved unchanged);
+	 * otherwise the id may now name another task and this throws.
+	 *
+	 * @returns the task's text as now stored (its line plus description
+	 * lines, as a reload reads them), for callers that keep a copy
+	 */
+	async writeTaskLine(task: Task): Promise<string> {
+		// Prefer the snapshot: the UI component might not preserve extra fields
+		const snapshot = this.taskCache.get(task.id);
+		const filePath = task.extra?.file || snapshot?.file;
 
 		if (!filePath) {
 			throw new Error("Cannot update task: file information missing");
@@ -259,86 +498,62 @@ export class ObsidianTasksRepo implements TaskRepository {
 		if (!(file instanceof TFile)) {
 			throw new Error(`Cannot update task: file not found: ${filePath}`);
 		}
+		// The caller's copy must be of the task the id names now. After a
+		// reload the id can name another task that moved onto its line, and
+		// a copy read before (e.g. in an open editor) must not overwrite it.
+		// Copies from before this repository's own writes are still current.
+		const callerLine = task.extra?.rawText;
+		if (
+			snapshot &&
+			callerLine &&
+			!isSameTaskLine(callerLine, snapshot.rawText) &&
+			!isSameTaskLine(callerLine, snapshot.loadedText)
+		) {
+			throw new StaleTaskError(task.id);
+		}
+		const expectedLine = snapshot?.rawText || callerLine;
+		if (!expectedLine) {
+			throw new Error(
+				`Cannot update task: ${task.id} was never read from the vault — query tasks again.`,
+			);
+		}
+		const position = snapshot?.position || task.extra?.position;
 
-		let updateSucceeded = false;
+		const outcome: { writtenLine?: string } = {};
 		await this.plugin.app.vault.process(file, (content) => {
 			const lines = content.split("\n");
-			let lineIndex = -1;
-			// Prefer cached rawText over task.extra.rawText (UI may not preserve it)
-			const storedRawText = cached?.rawText || task.extra?.rawText;
-			const storedPosition = cached?.position || task.extra?.position;
-
-			// 1. Try to find by position with exact match
-			if (storedPosition) {
-				try {
-					const pos = JSON.parse(storedPosition) as Pos;
-					const lineAtPos = lines[pos.start.line];
-					if (lineAtPos !== undefined) {
-						// Exact match
-						if (lineAtPos === storedRawText) {
-							lineIndex = pos.start.line;
-						}
-						// Trimmed match (handles trailing whitespace differences)
-						else if (
-							storedRawText &&
-							lineAtPos.trim() === storedRawText.trim()
-						) {
-							lineIndex = pos.start.line;
-						}
-						// Line is still a task at this position (fallback)
-						else if (
-							TaskRegularExpressions.taskRegex.test(lineAtPos)
-						) {
-							lineIndex = pos.start.line;
-							console.debug(
-								"Using position fallback for task update",
-								{
-									expected: storedRawText,
-									found: lineAtPos,
-								},
-							);
-						}
-					}
-				} catch (e) {
-					console.warn("Failed to parse task position", e);
-				}
-			}
-
-			// 2. Fallback: Find by exact content match
-			if (lineIndex === -1 && storedRawText) {
-				lineIndex = lines.indexOf(storedRawText);
-				// Try trimmed match
-				if (lineIndex === -1) {
-					lineIndex = lines.findIndex(
-						(l) => l.trim() === storedRawText.trim(),
-					);
-				}
-			}
-
-			if (lineIndex === -1) {
-				console.error(
-					"Could not find original task line to update",
-					task,
-				);
+			const lineIndex = locateTaskLine(lines, expectedLine, position);
+			const originalLine = lines[lineIndex];
+			if (originalLine === undefined) {
 				return content;
 			}
-
-			// 3. Update the line
-			const originalLine = lines[lineIndex];
-			if (originalLine) {
-				const newLine = taskToMarkdown(task, originalLine);
-				lines[lineIndex] = newLine;
-				updateSucceeded = true;
-			} else {
-				console.error("Original line undefined at index", lineIndex);
-			}
-
-			return lines.join("\n");
+			const newLine = taskToMarkdown(task, originalLine);
+			outcome.writtenLine = newLine;
+			return [
+				...lines.slice(0, lineIndex),
+				newLine,
+				...lines.slice(lineIndex + 1),
+			].join("\n");
 		});
 
-		if (!updateSucceeded) {
-			throw new Error("Could not find task line to update");
+		if (outcome.writtenLine === undefined) {
+			throw new StaleTaskError(task.id);
 		}
+		// Remember the written line so a follow-up update of the same task
+		// (e.g. leaving inline edit mode) still matches before the next load.
+		// Its description lines below were left as they were.
+		const storedText = [
+			storedLineText(outcome.writtenLine, position),
+			...expectedLine.split("\n").slice(1),
+		].join("\n");
+		this.taskCache.set(task.id, {
+			file: filePath,
+			rawText: storedText,
+			loadedText: snapshot?.loadedText ?? expectedLine,
+			position: position ?? "",
+		});
+		this.invalidateFile(filePath);
+		return storedText;
 	}
 
 	async deleteTask(id: string): Promise<void> {
@@ -354,54 +569,44 @@ export class ObsidianTasksRepo implements TaskRepository {
 			);
 		}
 
-		let deleteSucceeded = false;
-		let expectedContent: string | null = null;
+		const outcome: { expectedContent?: string; hasNestedItems?: boolean } =
+			{};
 		await this.plugin.app.vault.process(file, (content) => {
 			const lines = content.split("\n");
-			let lineIndex = -1;
-
-			// 1. Try to find by position
-			if (cached.position) {
-				try {
-					const pos = JSON.parse(cached.position) as Pos;
-					if (
-						lines[pos.start.line] !== undefined &&
-						lines[pos.start.line] === cached.rawText
-					) {
-						lineIndex = pos.start.line;
-					}
-				} catch (e) {
-					console.warn("Failed to parse task position", e);
-				}
-			}
-
-			// 2. Fallback: Find by content
-			if (lineIndex === -1) {
-				lineIndex = lines.indexOf(cached.rawText);
-			}
-
-			if (lineIndex === -1) {
-				console.error(
-					"Could not find task line to delete",
-					cached.rawText,
-				);
+			// Remove the description lines too, or they would join the
+			// previous task's list item.
+			const block = locateTaskBlock(
+				lines,
+				cached.rawText,
+				cached.position,
+			);
+			if (!block) {
 				return content;
 			}
-
-			// 3. Delete the line
-			lines.splice(lineIndex, 1);
-			deleteSucceeded = true;
-
-			expectedContent = lines.join("\n");
-			return expectedContent;
+			// Refuse rather than delete or re-indent the sub-tasks: either
+			// would change tasks the caller did not ask to change.
+			if (hasNestedItems(lines, block.start, block.start + block.count)) {
+				outcome.hasNestedItems = true;
+				return content;
+			}
+			outcome.expectedContent = [
+				...lines.slice(0, block.start),
+				...lines.slice(block.start + block.count),
+			].join("\n");
+			return outcome.expectedContent;
 		});
 
-		if (!deleteSucceeded) {
-			throw new Error("Could not find task line to delete");
+		if (outcome.hasNestedItems) {
+			throw new Error(
+				"Cannot delete task: it has sub-tasks or other nested items — delete or move them first.",
+			);
+		}
+		if (outcome.expectedContent === undefined) {
+			throw new StaleTaskError(id);
 		}
 
 		const persistedContent = await this.plugin.app.vault.read(file);
-		if (persistedContent !== expectedContent) {
+		if (persistedContent !== outcome.expectedContent) {
 			throw new Error(
 				`Cannot delete task: file write was rejected or changed by Obsidian: ${cached.file}`,
 			);
