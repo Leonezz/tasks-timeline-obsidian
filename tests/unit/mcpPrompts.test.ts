@@ -42,6 +42,12 @@ describe("obsidian_task_guide (MCP)", () => {
 	it("says that taskId is not the tool id", async () => {
 		expect(await taskGuide()).toMatch(/taskId.*not the `id`/);
 	});
+
+	it("says that a title is one line", async () => {
+		expect(await taskGuide()).toMatch(
+			/title can't have a line break.*`description`/,
+		);
+	});
 });
 
 describe("the in-app agent's Obsidian prompt", () => {
@@ -55,6 +61,8 @@ describe("the in-app agent's Obsidian prompt", () => {
 		["[[key:: value]]"],
 		["DTSTART"],
 		["every day at 9:30"],
+		["COUNT"],
+		["title can't have a line break"],
 	])("mentions %s", (text) => {
 		expect(OBSIDIAN_AI_SYSTEM_PROMPT).toContain(text);
 	});

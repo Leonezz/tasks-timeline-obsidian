@@ -17,11 +17,22 @@ import { DateTime } from "luxon";
  * line), but the plugin sees both lines, so it joins them: the rule is
  * written as Obsidian Tasks text, with the day DTSTART gave it made
  * explicit ("every week on Friday"), and the "RRULE:" line is removed.
+ *
+ * v0.8.0 itself read "🔁 DTSTART:20261015T160000Z" as the rule "DTSTART"
+ * and left ":20261015T160000Z" in the title, so a task it saved again has
+ * the start date in its title and "🔁 DTSTART" after its fields:
+ *
+ *   - [x] Report  :20261015T160000Z 📅 2026-10-16 ✅ 2026-10-17 🔁 DTSTART
+ *   RRULE:FREQ=WEEKLY;INTERVAL=1
+ *
+ * That is joined the same way, with the start date taken out of the title.
  */
 
 /** The second line of a split rule (and a block id v0.8.0 wrote after it). */
 const RULE_LINE = /^[\s>]*RRULE:([A-Za-z0-9=;:,+\-/]+)( \^[a-zA-Z0-9-]+)?\s*$/;
 const DTSTART = /^DTSTART(?:;([^:]*))?:(\d{8})(?:T(\d{6})(Z?))?$/;
+/** What v0.8.0 left of DTSTART in a title: ";VALUE=DATE:20261016", ":2026…Z". */
+const LEFT_START = /(?:^|\s)((?:;[A-Za-z]+=[^\s:;]+)*:\d{8}(?:T\d{6}Z?)?)(?=\s|$)/g;
 const WEEKDAYS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 const PERIODS: Record<string, string> = {
 	DAILY: "days",
@@ -39,6 +50,8 @@ export interface SplitRuleRepair {
 	startAt?: string;
 	/** The task line with the rule as text; it replaces both lines. */
 	line: string;
+	/** The start date v0.8.0 left in the title, which the line no longer has. */
+	titleFragment?: string;
 }
 
 class RepairError extends Error {}
@@ -168,6 +181,23 @@ function ruleText(rrule: string, dtstart: string, read: Task): string {
 	}
 }
 
+const escapeRegExp = (text: string) =>
+	text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** `text` without `fragment` and the spaces before it. */
+function withoutFragment(text: string, fragment: string): string {
+	return text.replace(
+		new RegExp(`(?:^|\\s+)${escapeRegExp(fragment)}(?=\\s|$)`),
+		"",
+	);
+}
+
+/** The start date v0.8.0 left in a title, when there is exactly one. */
+function leftStartDate(title: string): string | undefined {
+	const found = [...title.matchAll(LEFT_START)].map((match) => match[1]);
+	return found.length === 1 ? found[0] : undefined;
+}
+
 /**
  * Joins a rule v0.8.0 split over `taskLine` ("🔁 DTSTART:…") and the line
  * below it ("RRULE:…").
@@ -197,26 +227,42 @@ export function repairSplitRule(
 	if (!original?.startsWith("DTSTART")) {
 		return undefined;
 	}
+	// A task v0.8.0 saved again: its start date is in the title.
+	const left = original === "DTSTART" ? leftStartDate(read.title) : undefined;
 	try {
-		const rule = ruleText(ruleLine[1], original, read);
+		if (original === "DTSTART" && !left) {
+			throw new RepairError(
+				'"🔁 DTSTART" has lost its start date, so the day the rule repeats on is unknown',
+			);
+		}
+		const dtstart = left ? `${original}${left}` : original;
+		const rule = ruleText(ruleLine[1], dtstart, read);
 		const hasDate = !!(read.dueAt || read.startAt || read.extra?.["scheduledAt"]);
-		const startAt = hasDate ? undefined : startDate(original).toISODate() ?? undefined;
+		const startAt = hasDate ? undefined : startDate(dtstart).toISODate() ?? undefined;
 		const written = startAt ? `${rule} 🛫 ${startAt}` : rule;
 		const blockId = ruleLine[2] ?? "";
 		if (blockId && TaskRegularExpressions.blockLinkRegex.test(taskLine)) {
 			throw new RepairError("both lines end with a block id");
 		}
 		const at = taskLine.indexOf(original, taskLine.indexOf("🔁"));
+		const before = taskLine.slice(0, at);
 		const line =
-			taskLine.slice(0, at) +
+			(left ? withoutFragment(before, left) : before) +
 			written +
 			taskLine.slice(at + original.length).trimEnd() +
 			blockId;
-		return { original, rule, line, ...(startAt ? { startAt } : {}) };
+		return {
+			original,
+			rule,
+			line,
+			...(startAt ? { startAt } : {}),
+			...(left ? { titleFragment: left } : {}),
+		};
 	} catch (error) {
 		if (!(error instanceof RepairError)) throw error;
+		const removeLeft = left ? `remove "${left}" from the title, ` : "";
 		throw new Error(
-			`Cannot repair the recurrence rule v0.8.0 split over two lines ("🔁 ${original}" and "RRULE:${ruleLine[1]}"): ${error.message}. Edit the note: delete the "RRULE:" line below the task, and replace "🔁 ${original}" with the rule as Obsidian Tasks text, such as "🔁 every week".`,
+			`Cannot repair the recurrence rule v0.8.0 split over two lines ("🔁 ${original}" and "RRULE:${ruleLine[1]}"): ${error.message}. Edit the note: delete the "RRULE:" line below the task, ${removeLeft}and replace "🔁 ${original}" with the rule as Obsidian Tasks text, such as "🔁 every week".`,
 		);
 	}
 }
@@ -224,17 +270,24 @@ export function repairSplitRule(
 /**
  * The task to write onto a repaired line: with the joined rule when it
  * still has the rule as read from the split line (a read that could not see
- * the rule's second line), else as it is.
+ * the rule's second line), else as it is; and without the start date
+ * v0.8.0 left in its title.
  */
 export function withRepairedRule(
 	task: Task,
 	repair: SplitRuleRepair | undefined,
 ): Task {
-	if (!repair || task.recurringInterval !== repair.original) {
+	if (!repair) {
 		return task;
 	}
+	const titled = repair.titleFragment
+		? { ...task, title: withoutFragment(task.title, repair.titleFragment).trim() }
+		: task;
+	if (task.recurringInterval !== repair.original) {
+		return titled;
+	}
 	return {
-		...task,
+		...titled,
 		isRecurring: true,
 		recurringInterval: repair.rule,
 		startAt: task.startAt ?? repair.startAt,

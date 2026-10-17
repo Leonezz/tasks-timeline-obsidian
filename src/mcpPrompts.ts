@@ -97,6 +97,8 @@ High is written as ⏫ and low as 🔽; medium is not written.
 
 ## Fields
 
+A task is one line, so a title can't have a line break: such a title is rejected before anything is written. Put details in \`description\`.
+
 Fields are emoji followed by a value, written after the task's title:
 
 | Emoji | Field | Meaning |
@@ -118,7 +120,7 @@ A completed task keeps its ✅ date and a cancelled one its ❌ date; setting a 
 
 ## Recurrence
 
-Rules are stored as Obsidian Tasks text: \`every week on Monday\`, \`every 2 weeks\`, \`every month on the 15th until December 31, 2026\`, \`every week when done\`. RRULE syntax given to the tools is stored as text. Rules a task line can't hold are rejected before anything is written: rules with a start date (DTSTART; set the task's \`startAt\` instead), BYSETPOS, and counts (COUNT, "for 3 times"; use an end date).
+Rules are stored as Obsidian Tasks text: \`every week on Monday\`, \`every 2 weeks\`, \`every month on the 15th until December 31, 2026\`, \`every week when done\`. RRULE syntax given to the tools is stored as text. Rules a task line can't hold are rejected before anything is written: rules with a start date (DTSTART; set the task's \`startAt\` instead), BYSETPOS, and counts (COUNT, "for 3 times"; use an end date such as UNTIL=20261231 or "until December 31, 2026").
 
 A 🔁 that runs straight into other text is not a rule but part of the title, as in Obsidian Tasks: in \`Standup 🔁 every day at 9:30\` the title is the whole text and the task does not recur.
 

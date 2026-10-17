@@ -12,7 +12,6 @@ import {
 	GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
-	createCapabilities,
 	type Capabilities,
 	type PromptSpec,
 	type ResourceSpec,
@@ -27,6 +26,7 @@ import { McpLogger } from "./mcpLogger";
 import { ResourceSubscriptionManager } from "./mcpSubscriptions";
 import { createObsidianPrompts } from "./mcpPrompts";
 import {
+	createObsidianCapabilities,
 	createObsidianCapabilityContext,
 	type ObsidianCapabilityContext,
 } from "./taskCapabilities";
@@ -128,7 +128,7 @@ export class ObsidianMcpServer {
 			this.securityManager,
 		);
 		this.ctx = ctx;
-		this.capabilities = createCapabilities(ctx);
+		this.capabilities = createObsidianCapabilities(ctx);
 		this.obsidianPrompts = createObsidianPrompts(ctx);
 
 		this.subscriptionManager = new ResourceSubscriptionManager(plugin);

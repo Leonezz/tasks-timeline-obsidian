@@ -87,6 +87,19 @@ function unstorableChanges(task: Task, previous: Task): string[] {
 }
 
 /**
+ * Throws for a title with a line break: a task line holds one line, and the
+ * text after the break would become lines of its own (extra tasks, if it
+ * reads "- [ ] …"). Details go in the description.
+ */
+function assertSingleLineTitle(task: Task, action: string): void {
+	if (/[\r\n]/.test(task.title)) {
+		throw new Error(
+			`Cannot ${action}: the title has a line break, and a task line can only hold one line. Put the title on one line and the rest in the description.`,
+		);
+	}
+}
+
+/**
  * Decides whether an edit of a vault task needs a write.
  *
  * Both versions are serialized onto the stored line, so only changes the line
@@ -97,9 +110,10 @@ function unstorableChanges(task: Task, previous: Task): string[] {
  * or when the stored line is unknown (`updateTask` then locates it itself).
  * @throws when the edit changes anything the vault line cannot store, even
  * alongside changes it can: saving only part of an edit would drop the rest
- * without a word.
+ * without a word; and for a title with a line break.
  */
 export function taskUpdateNeedsWrite(task: Task, previous: Task): boolean {
+	assertSingleLineTitle(task, "update task");
 	const unstorable = unstorableChanges(task, previous);
 	if (unstorable.length > 0) {
 		const frontmatterHint = unstorable.some((change) =>
@@ -409,6 +423,8 @@ export class ObsidianTasksRepo implements TaskRepository {
 			);
 		}
 
+		assertSingleLineTitle(task, "add task");
+
 		// The typed title is the new line's text, so Tasks fields typed into
 		// it ("Pay rent 📅 2026-10-20") stay on the line as typed.
 		const statusMarker = task.status === "done" ? "x" : " ";
@@ -435,67 +451,130 @@ export class ObsidianTasksRepo implements TaskRepository {
 		});
 
 		this.invalidateFile(targetFile);
-		return this.readAddedTask(file, insertedLine);
+		return this.readAddedTask(file, insertedLine, taskLine);
 	}
 
 	/**
 	 * Re-reads a freshly appended task once Obsidian has indexed the new line.
-	 * The task line is appended past the previous end of the file, so a list
-	 * item at `line` can only come from the updated metadata.
+	 *
+	 * The metadata cache can lag behind: when another write to the note just
+	 * before this one moved lines up (a deleted task, a split rule joined
+	 * into one line), an older index can already have a list item on the new
+	 * line's index, and the first re-index after that write does not have
+	 * the appended line yet. So a task is only taken as the added one when
+	 * its line is the line that was written, and until then each re-index of
+	 * the note is read again, up to a timeout.
 	 */
-	private async readAddedTask(file: TFile, line: number): Promise<Task> {
-		await this.waitForTaskItem(file, line);
-		this.invalidateFile(file.path);
+	private async readAddedTask(
+		file: TFile,
+		line: number,
+		writtenLine: string,
+	): Promise<Task> {
+		const reindexes = this.watchReindexes(file, ADDED_TASK_INDEX_TIMEOUT_MS);
+		let indexed = false;
+		try {
+			for (;;) {
+				const seen = reindexes.count();
+				if (this.hasTaskItemAt(file, line)) {
+					indexed = true;
+					const stored = await this.readTaskWrittenAt(
+						file,
+						line,
+						writtenLine,
+					);
+					if (stored) return stored;
+				}
+				if (!(await reindexes.after(seen))) break;
+			}
+		} finally {
+			reindexes.dispose();
+		}
+		throw new Error(
+			indexed
+				? `Task was written to ${file.path} (line ${line + 1}) but could not be read back as a task. List tasks to find its id before changing it.`
+				: `Task was written to ${file.path} (line ${line + 1}) but Obsidian did not index it within ${ADDED_TASK_INDEX_TIMEOUT_MS / 1000}s. List tasks to find its id before changing it.`,
+		);
+	}
 
+	/** Whether the metadata cache has a task item starting at `line`, column 0. */
+	private hasTaskItemAt(file: TFile, line: number): boolean {
+		return (
+			this.plugin.app.metadataCache
+				.getFileCache(file)
+				?.listItems?.some(
+					(item) =>
+						item.task !== undefined &&
+						item.position.start.line === line &&
+						item.position.start.col === 0,
+				) ?? false
+		);
+	}
+
+	/** The task at `line` if its line is `writtenLine`, remembered for writes. */
+	private async readTaskWrittenAt(
+		file: TFile,
+		line: number,
+		writtenLine: string,
+	): Promise<Task | undefined> {
+		this.invalidateFile(file.path);
 		// Read only this note: a full load would also replace the snapshots
 		// of tasks the caller has not re-read, hiding their staleness.
 		const tasks = await this.readFileTasks(file);
-		const stored = tasks.find(
-			(t) =>
+		const stored = tasks.find((t) => {
+			const position = t.extra?.position;
+			return (
 				t.extra?.file === file.path &&
-				t.extra?.position !== undefined &&
-				(JSON.parse(t.extra.position) as Pos).start.line === line,
-		);
-		if (!stored) {
-			throw new Error(
-				`Task was written to ${file.path} (line ${line + 1}) but could not be read back as a task. List tasks to find its id before changing it.`,
+				position !== undefined &&
+				(JSON.parse(position) as Pos).start.line === line &&
+				t.extra?.rawText?.split("\n")[0] === writtenLine
 			);
-		}
+		});
+		if (!stored) return undefined;
 		const snapshot = snapshotOf(stored);
 		if (snapshot) this.taskCache.set(stored.id, snapshot);
 		return stored;
 	}
 
-	private waitForTaskItem(file: TFile, line: number): Promise<void> {
+	/**
+	 * Counts the re-indexes of `file` from now on, for waiting on the next
+	 * one; waits end once `timeoutMs` has passed.
+	 */
+	private watchReindexes(file: TFile, timeoutMs: number) {
 		const metadataCache = this.plugin.app.metadataCache;
-		const hasTaskItem = () =>
-			metadataCache
-				.getFileCache(file)
-				?.listItems?.some(
-					(item) =>
-						item.task !== undefined &&
-						item.position.start.line === line,
-				) ?? false;
-
-		if (hasTaskItem()) return Promise.resolve();
-
-		return new Promise<void>((resolve, reject) => {
-			let timer: number | undefined;
-			const ref = metadataCache.on("changed", (changedFile) => {
-				if (changedFile.path !== file.path || !hasTaskItem()) return;
+		let count = 0;
+		let timedOut = false;
+		let waiters: (() => void)[] = [];
+		const wake = () => {
+			const woken = waiters;
+			waiters = [];
+			woken.forEach((waiter) => waiter());
+		};
+		const ref = metadataCache.on("changed", (changedFile) => {
+			if (changedFile.path !== file.path) return;
+			count++;
+			wake();
+		});
+		const timer = window.setTimeout(() => {
+			timedOut = true;
+			wake();
+		}, timeoutMs);
+		return {
+			count: () => count,
+			/** Resolves true on a re-index after the `seen`th, false on timeout. */
+			after: (seen: number) =>
+				new Promise<boolean>((resolve) => {
+					const check = () => {
+						if (count > seen) resolve(true);
+						else if (timedOut) resolve(false);
+						else waiters.push(check);
+					};
+					check();
+				}),
+			dispose: () => {
 				window.clearTimeout(timer);
 				metadataCache.offref(ref);
-				resolve();
-			});
-			timer = window.setTimeout(() => {
-				metadataCache.offref(ref);
-				reject(
-					new Error(
-						`Task was written to ${file.path} (line ${line + 1}) but Obsidian did not index it within ${ADDED_TASK_INDEX_TIMEOUT_MS / 1000}s. List tasks to find its id before changing it.`,
-					),
-				);
-			}, ADDED_TASK_INDEX_TIMEOUT_MS);
-		});
+			},
+		};
 	}
 
 	saveTasks(tasks: Task[]): Promise<void> {
@@ -516,6 +595,7 @@ export class ObsidianTasksRepo implements TaskRepository {
 	 * lines, as a reload reads them), for callers that keep a copy
 	 */
 	async writeTaskLine(task: Task): Promise<string> {
+		assertSingleLineTitle(task, "update task");
 		// Prefer the snapshot: the UI component might not preserve extra fields
 		const snapshot = this.taskCache.get(task.id);
 		const filePath = task.extra?.file || snapshot?.file;

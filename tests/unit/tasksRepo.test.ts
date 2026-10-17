@@ -228,6 +228,27 @@ describe("ObsidianTasksRepo.addTask", () => {
 		});
 	});
 
+	it.each([
+		["a line break", "Line one\nLine two"],
+		["a Windows line break", "A\r\nB"],
+		["a carriage return", "A\rB"],
+		["task lines", "Buy groceries:\n- [ ] milk\n- [ ] eggs"],
+	])(
+		"rejects a title with %s before writing anything",
+		async (_kind, title) => {
+			const { app, file, repo } = createRepo("- [ ] Existing\n");
+			const processSpy = reindexAfterWrites(app);
+
+			await expect(repo.addTask({ ...baseTask, title })).rejects.toThrow(
+				/Cannot add task: the title has a line break.*description/,
+			);
+			expect(processSpy).not.toHaveBeenCalled();
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"- [ ] Existing\n",
+			);
+		},
+	);
+
 	it("rejects when the target note does not exist", async () => {
 		const { app, repo } = createRepo("- [ ] Existing\n");
 
@@ -367,6 +388,81 @@ describe("taskUpdateNeedsWrite", () => {
 				previous,
 			),
 		).toThrow(/category cannot be stored in the vault line/);
+	});
+});
+
+describe("ObsidianTasksRepo with a title that has a line break", () => {
+	it("refuses to write it onto the task's line and leaves the note", async () => {
+		const content = "- [ ] Draft\n- [ ] Next\n";
+		const { app, file, repo } = createRepo(content);
+		const [task] = await repo.loadTasks();
+		const renamed = { ...task!, title: "Draft\n- [ ] Extra" };
+
+		expect(() => taskUpdateNeedsWrite(renamed, task!)).toThrow(
+			/Cannot update task: the title has a line break/,
+		);
+		await expect(repo.updateTask(renamed)).rejects.toThrow(
+			/Cannot update task: the title has a line break/,
+		);
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+});
+
+describe("ObsidianTasksRepo reading back an added task", () => {
+	it("waits for the re-index of its own line when a write just before moved the lines up", async () => {
+		const { app, file, repo } = createRepo(
+			"- [ ] First\n- [ ] Second\n- [ ] Third\n",
+		);
+		reindexAfterWrites(app);
+		repo.watchVault();
+		await repo.loadTasks();
+
+		// The delete moves "Third" up, and the new task lands on the line
+		// the old index still has "Third" on.
+		await repo.deleteTask("Tasks.md:0:0");
+		const added = await repo.addTask({
+			id: "new",
+			title: "Added",
+			status: "todo",
+			priority: "medium",
+			tags: [],
+		});
+
+		expect(added).toMatchObject({ id: "Tasks.md:2:0", title: "Added" });
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Second\n- [ ] Third\n- [ ] Added\n",
+		);
+	});
+
+	it("rejects, after the timeout, when the line indexed there is not the one written", async () => {
+		jest.useFakeTimers();
+		try {
+			// A line removed by the same write, and an index that never
+			// catches up: it still has "Third" on the new task's line.
+			const { app, repo } = createRepo(
+				"- [ ] Existing\n- [ ] Other task\n- [ ] Third\n",
+			);
+			jest.spyOn(app.vault, "process").mockImplementation(async (file, fn) => {
+				const content = await app.vault.read(file);
+				await app.vault.modify(file, fn(content.replace("- [ ] Other task\n", "")));
+			});
+
+			const result = repo.addTask({
+				id: "new",
+				title: "Added",
+				status: "todo",
+				priority: "medium",
+				tags: [],
+			});
+			const assertion = expect(result).rejects.toThrow(
+				/Task was written to Tasks.md \(line 3\) but could not be read back as a task/,
+			);
+			await jest.advanceTimersByTimeAsync(5000);
+			await assertion;
+			expect(app.metadataCache._listenerCount()).toBe(0);
+		} finally {
+			jest.useRealTimers();
+		}
 	});
 });
 
@@ -1031,6 +1127,56 @@ describe("ObsidianTasksRepo with a rule v0.8.0 split over two lines", () => {
 		await expect(app.vault.cachedRead(file)).resolves.toBe(
 			"- [ ] Weekly report 📅 2026-10-16 🔁 every week on Friday\n- [ ] Next\n",
 		);
+	});
+
+	describe("saved again by v0.8.0 (start date in the title, 🔁 DTSTART)", () => {
+		const RESAVED = `- [x] Report  ${START.slice("DTSTART".length)} 📅 2026-10-16 ✅ 2026-10-17 🔁 DTSTART\nRRULE:FREQ=WEEKLY;INTERVAL=1\n- [ ] Next\n`;
+
+		it("reads the title and the joined rule", async () => {
+			const { repo } = createSplitRepo(RESAVED);
+
+			const [task] = await repo.loadTasks();
+
+			expect(task).toMatchObject({
+				title: "Report",
+				recurringInterval: "every week on Friday",
+			});
+		});
+
+		it("leaves the note alone for an edit that changes nothing", async () => {
+			const { repo } = createSplitRepo(RESAVED);
+			const [task] = await repo.loadTasks();
+
+			expect(taskUpdateNeedsWrite({ ...task! }, task!)).toBe(false);
+		});
+
+		it("repairs the line when the task is ticked", async () => {
+			const { app, file, repo } = createSplitRepo(RESAVED);
+			const [task] = await repo.loadTasks();
+			const reopened = {
+				...task!,
+				status: "todo" as const,
+				completedAt: undefined,
+			};
+
+			expect(taskUpdateNeedsWrite(reopened, task!)).toBe(true);
+			await repo.updateTask(reopened);
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"- [ ] Report 📅 2026-10-16 🔁 every week on Friday\n- [ ] Next\n",
+			);
+		});
+
+		it("repairs a line Obsidian indexed without the rule's second line", async () => {
+			const { app, file, repo } = createRepo(RESAVED);
+			const [task] = await repo.loadTasks();
+
+			await repo.updateTask({ ...task!, title: "Weekly report" });
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(
+				"- [x] Weekly report 📅 2026-10-16 ✅ 2026-10-17 🔁 every week on Friday\n- [ ] Next\n",
+			);
+		});
 	});
 
 	it("refuses a rule it can't repair, with the manual fix, and leaves the note", async () => {

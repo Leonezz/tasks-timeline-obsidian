@@ -130,3 +130,67 @@ describe("repairSplitRule", () => {
 		);
 	});
 });
+
+/*
+ * v0.8.0 read "🔁 DTSTART:20261015T160000Z" as the rule "DTSTART" and left
+ * ":20261015T160000Z" in the title, so saving such a task again under
+ * v0.8.0 wrote the start date into the title and "🔁 DTSTART" after the
+ * fields, with the "RRULE:" line still below.
+ */
+describe("repairSplitRule on a line v0.8.0 saved again", () => {
+	/** What v0.8.0 left of DTSTART in the title. */
+	const fragment = (start: string) => start.slice("DTSTART".length);
+
+	it.each([
+		["a done task", "- [x]", "📅 2026-10-16 ✅ 2026-10-17"],
+		["a renamed task", "- [ ]", "📅 2026-10-16"],
+	])("joins the start date left in the title of %s", (_kind, box, fields) => {
+		const start = dtstart("2026-10-16");
+		const repair = repairSplitRule(
+			`${box} Report  ${fragment(start)} ${fields} 🔁 DTSTART`,
+			"RRULE:FREQ=WEEKLY;INTERVAL=1",
+		);
+
+		expect(repair).toEqual({
+			original: "DTSTART",
+			rule: "every week on Friday",
+			titleFragment: fragment(start),
+			line: `${box} Report ${fields} 🔁 every week on Friday`,
+		});
+	});
+
+	it.each([
+		[";VALUE=DATE:20261016"],
+		[":20261016T090000"],
+		[";TZID=Asia/Tokyo:20261016T090000"],
+	])("reads a start date left as %s", (left) => {
+		const repair = repairSplitRule(
+			`- [ ] Report  ${left} 📅 2026-10-16 🔁 DTSTART`,
+			"RRULE:FREQ=WEEKLY",
+		);
+
+		expect(repair).toMatchObject({
+			rule: "every week on Friday",
+			line: "- [ ] Report 📅 2026-10-16 🔁 every week on Friday",
+		});
+	});
+
+	it("refuses a rule whose start date is gone, saying so", () => {
+		const line = "- [ ] Weekly report 📅 2026-10-16 🔁 DTSTART";
+
+		expect(() => repairSplitRule(line, "RRULE:FREQ=WEEKLY")).toThrow(
+			/"🔁 DTSTART" has lost its start date.*delete the "RRULE:" line below the task, and replace "🔁 DTSTART" with the rule/,
+		);
+	});
+
+	it("refuses a rule it can't join, with the start date to remove from the title", () => {
+		const left = fragment(dtstart("2026-10-16"));
+		const line = `- [ ] Report  ${left} 📅 2026-10-16 🔁 DTSTART`;
+
+		expect(() => repairSplitRule(line, "RRULE:FREQ=WEEKLY;COUNT=5")).toThrow(
+			new RegExp(
+				`COUNT.*delete the "RRULE:" line below the task, remove "${left}" from the title, and replace "🔁 DTSTART"`,
+			),
+		);
+	});
+});
