@@ -128,12 +128,30 @@ export const dailyNoteTaskParser = (
 	};
 };
 
+/**
+ * The reminder remainderParser takes out of a title, if any: an
+ * obsidian-reminder `(@YYYY-MM-DD HH:mm)`. (⏰ reminders are never in the
+ * title: the Tasks parser keeps them out of it.)
+ */
+export function reminderIn(text: string): string | undefined {
+	return text.match(TaskRegularExpressions.remainderRegex)?.[0];
+}
+
+/** `text` without its reminders, as on a new line for the next occurrence. */
+export function withoutReminders(text: string): string {
+	return text.replace(
+		new RegExp(TaskRegularExpressions.remainderRegex.source, "g"),
+		"",
+	);
+}
+
+/** Takes the reminder out of the title; the line keeps it (see lineWriter.ts). */
 export const remainderParser = (item: Task): Task => {
-	const match = item.title.match(TaskRegularExpressions.remainderRegex);
-	if (!match) {
+	const reminder = reminderIn(item.title);
+	if (!reminder) {
 		return item;
 	}
-	item.title = item.title.replace(match[0], "").trim();
+	item.title = item.title.replace(reminder, "").trim();
 	return item;
 };
 

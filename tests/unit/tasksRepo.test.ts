@@ -880,3 +880,68 @@ describe("ObsidianTasksRepo with Dataview inline fields", () => {
 		expect(reloaded).toMatchObject({ title: "Task", dueAt: "2026-10-30" });
 	});
 });
+
+describe("ObsidianTasksRepo with reminders", () => {
+	async function loadOnly(content: string) {
+		const { app, file, repo } = createRepo(content);
+		const [task] = await repo.loadTasks();
+		if (!task) throw new Error(`No task parsed from: ${content}`);
+		return { app, file, repo, task };
+	}
+
+	const REMINDER = "- [ ] Call mom (@2026-10-16 09:00) 📅 2026-10-16\n";
+
+	it("shows the title without an obsidian-reminder reminder", async () => {
+		const { task } = await loadOnly(REMINDER);
+
+		expect(task.title).toBe("Call mom");
+	});
+
+	it.each([
+		[
+			"completes a task, keeping its (@) reminder",
+			REMINDER,
+			{ status: "done", completedAt: "2026-10-17" },
+			"- [x] Call mom (@2026-10-16 09:00) 📅 2026-10-16 ✅ 2026-10-17\n",
+		],
+		[
+			"renames a task, keeping its (@) reminder",
+			REMINDER,
+			{ title: "Call dad" },
+			"- [ ] Call dad (@2026-10-16 09:00) 📅 2026-10-16\n",
+		],
+		[
+			"keeps a date-only (@) reminder",
+			"- [ ] Call mom (@2026-10-16)\n",
+			{ status: "done", completedAt: "2026-10-17" },
+			"- [x] Call mom (@2026-10-16) ✅ 2026-10-17\n",
+		],
+		[
+			"keeps a (@) reminder after the fields",
+			"- [ ] Call mom 📅 2026-10-16 (@2026-10-16 09:00)\n",
+			{ status: "done", completedAt: "2026-10-17" },
+			"- [x] Call mom 📅 2026-10-16 ✅ 2026-10-17 (@2026-10-16 09:00)\n",
+		],
+		[
+			"keeps a ⏰ reminder",
+			"- [ ] Call mom ⏰ 2026-10-16 09:00 📅 2026-10-16\n",
+			{ status: "done", completedAt: "2026-10-17" },
+			"- [x] Call mom ⏰ 2026-10-16 09:00 📅 2026-10-16 ✅ 2026-10-17\n",
+		],
+	] as [string, string, Partial<Task>, string][])(
+		"%s",
+		async (_case, content, changes, expected) => {
+			const { app, file, repo, task } = await loadOnly(content);
+
+			await repo.updateTask({ ...task, ...changes });
+
+			await expect(app.vault.cachedRead(file)).resolves.toBe(expected);
+		},
+	);
+
+	it("needs no write for an edit that changes nothing", async () => {
+		const { task } = await loadOnly(REMINDER);
+
+		expect(taskUpdateNeedsWrite({ ...task }, task)).toBe(false);
+	});
+});

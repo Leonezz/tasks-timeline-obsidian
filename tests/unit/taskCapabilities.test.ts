@@ -440,6 +440,25 @@ describe("createObsidianCapabilityContext with Dataview inline fields (MCP)", ()
 	});
 });
 
+describe("createObsidianCapabilityContext with reminders (MCP)", () => {
+	it("keeps a (@) reminder on the done line but not on the next occurrence", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(
+			"- [ ] Call mom 🔁 every week 📅 2026-10-16 (@2026-10-16 09:00)\n",
+		);
+
+		const { result } = await capabilities.executeTool("complete_task", {
+			id: await listedId(capabilities, "Call mom"),
+		});
+
+		expect(result).toMatchObject({ success: true });
+		const [done, next] = (await app.vault.cachedRead(file)).split("\n");
+		expect(done).toMatch(/^- \[x\] Call mom .* \(@2026-10-16 09:00\)$/);
+		// A reminder is for one occurrence, as the library treats ⏰.
+		expect(next).toMatch(/^- \[ \] Call mom .*📅 2026-10-23/);
+		expect(next).not.toContain("(@");
+	});
+});
+
 describe("createObsidianCapabilityContext with sub-tasks (MCP)", () => {
 	it("refuses to delete a parent task", async () => {
 		const content = "- [ ] Parent\n\t- [ ] Child\n";

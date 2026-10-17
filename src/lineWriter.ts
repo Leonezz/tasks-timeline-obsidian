@@ -10,7 +10,9 @@ import {
 	InlineField,
 	inlineFieldDate,
 	inlineFieldsIn,
+	reminderIn,
 	withoutInlineFields,
+	withoutReminders,
 	withoutTags,
 } from "./parsers";
 
@@ -18,8 +20,9 @@ import {
  * Writing tasks back onto their Obsidian lines.
  *
  * The timeline shows titles without the Dataview inline fields the plugin
- * reads ([[key:: value]]), and a date such a field holds becomes the task's
- * date. taskToMarkdown only knows the title: it rewrites a line's text when
+ * reads ([[key:: value]]) and without obsidian-reminder reminders
+ * ("(@2026-10-16 09:00)"), and a date a Dataview field holds becomes the
+ * task's date. taskToMarkdown only knows the title: it rewrites a line's text when
  * the title's words change, and writes every date as a Tasks field. So
  * before writing, the text taken out of the title is put back, and a date a
  * Dataview field holds is written in that field instead of as a 📅 field.
@@ -115,10 +118,10 @@ function applyEdit(text: string, edit: FieldEdit): string {
 
 /**
  * Writes a task onto its line (`text` may go on with description lines,
- * which are kept). Like taskToMarkdown, but keeps the Dataview fields the
- * plugin took out of the title, and writes a date a Dataview field holds in
- * that field: changed in place, or removed with the date. When the title was
- * renamed, its Dataview fields follow the new title.
+ * which are kept). Like taskToMarkdown, but keeps the Dataview fields and the
+ * reminder the plugin took out of the title, and writes a date a Dataview
+ * field holds in that field: changed in place, or removed with the date.
+ * When the title was renamed, they follow the new title.
  *
  * @throws as taskToMarkdown does, or when a Dataview field to change is no
  * longer on the line or is on it twice
@@ -133,12 +136,14 @@ export function writeTaskOnLine(task: Task, text: string): string {
 	const read = parseTasksFormatItem({ ...task, title: body, extra: {} });
 	const lineTitle = lineTitleOf(read.title);
 	const titleFields = inlineFieldsIn(lineTitle);
+	const fieldless = withoutInlineFields(lineTitle);
+	const reminder = reminderIn(fieldless);
+	const shown = reminder ? fieldless.replace(reminder, "") : fieldless;
+	const kept = [...titleFields.map((field) => field.text), reminder ?? ""];
 	const title =
-		words(task.title) === words(withoutInlineFields(lineTitle))
+		words(task.title) === words(shown)
 			? lineTitle
-			: [task.title.trim(), ...titleFields.map((field) => field.text)].join(
-					" ",
-				);
+			: [task.title, ...kept].filter((text) => text.trim()).join(" ");
 	const { edits, dates } = dateFieldEdits(task, [
 		...titleFields,
 		...inlineFieldsIn(read.extra?.["lineNotes"] ?? ""),
@@ -154,7 +159,8 @@ export function writeTaskOnLine(task: Task, text: string): string {
 /**
  * A task for a new line that carries notes from another line (the next
  * occurrence of a recurring task): dates the notes' Dataview fields hold are
- * written there, as on the line the notes come from.
+ * written there, as on the line the notes come from, and reminders, which
+ * are for one occurrence, are left out (as the library leaves out ⏰).
  */
 export function withNotesForNewLine(task: Task): Task {
 	const notes = task.extra?.["lineNotes"];
@@ -162,8 +168,9 @@ export function withNotesForNewLine(task: Task): Task {
 		return task;
 	}
 	const { edits, dates } = dateFieldEdits(task, inlineFieldsIn(notes));
+	const lineNotes = words(withoutReminders(edits.reduce(applyEdit, notes)));
 	return dates.reduce(
 		(written, date) => withDateValue(written, date, undefined),
-		{ ...task, extra: { ...task.extra, lineNotes: edits.reduce(applyEdit, notes) } },
+		{ ...task, extra: { ...task.extra, lineNotes } },
 	);
 }
