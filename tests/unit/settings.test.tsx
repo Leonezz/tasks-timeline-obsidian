@@ -2,6 +2,7 @@ import { act } from "@testing-library/react";
 import type { AppSettings, VoiceRuntime } from "@tasks-timeline/components";
 import type { App as ObsidianApp } from "obsidian";
 import type TasksTimelineObsidianPlugin from "../../src/main";
+import { obsidianFetch } from "../../src/obsidianHttp";
 import { DEFAULT_SETTINGS, TasksTimelineSettingTab } from "../../src/settings";
 import * as obsidian from "../mocks/obsidian";
 
@@ -14,6 +15,8 @@ interface McpTabProps {
 interface CapturedSettingsPageProps {
 	settings: AppSettings;
 	voiceRuntime?: VoiceRuntime;
+	aiFetch?: typeof fetch;
+	aiProviderFactory?: unknown;
 	onUpdateSettings: (settings: AppSettings) => void;
 	customTabs: { content: { props: McpTabProps } }[];
 }
@@ -134,12 +137,15 @@ describe("TasksTimelineSettingTab", () => {
 		act(() => tab.hide());
 	});
 
-	it("gives the AI page the timeline's voice runtime", () => {
+	it("gives the AI page the timeline's voice runtime and fetch", () => {
 		const { tab } = createTab(jest.fn<Promise<void>, []>().mockResolvedValue());
 		act(() => tab.display());
 
-		// The Browser voice provider is shown as unavailable.
+		// The Browser voice provider is shown as unavailable, and Test
+		// Connection goes through requestUrl.
 		expect(mockPageProps?.voiceRuntime?.browserSpeechSupported).toBe(false);
+		expect(mockPageProps?.aiFetch).toBe(obsidianFetch);
+		expect(mockPageProps?.aiProviderFactory).toBeUndefined();
 		act(() => tab.hide());
 	});
 

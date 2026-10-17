@@ -2,6 +2,7 @@ import { render, waitFor } from "@testing-library/react";
 import type { Task, VoiceRuntime } from "@tasks-timeline/components";
 import type TasksTimelineObsidianPlugin from "../../src/main";
 import { ObsidianAdaptor } from "../../src/obsidianAdapter";
+import { obsidianFetch } from "../../src/obsidianHttp";
 import * as obsidian from "../mocks/obsidian";
 import { editExternally, indexFile } from "../helpers/testHelpers";
 
@@ -11,6 +12,8 @@ interface CapturedAppProps {
 	onTaskDeleted: (taskId: string, previous: Task) => Promise<void>;
 	recurrenceFormat?: string;
 	voiceRuntime?: VoiceRuntime;
+	aiFetch?: typeof fetch;
+	aiProviderFactory?: unknown;
 }
 
 let mockAppProps: CapturedAppProps | undefined;
@@ -74,9 +77,12 @@ describe("ObsidianAdaptor task handlers", () => {
 		expect(props.recurrenceFormat).toBe("text");
 	});
 
-	it("declares browser speech unsupported", async () => {
+	it("sends AI requests through requestUrl and declares browser speech unsupported", async () => {
 		const { props } = await renderAdaptor("- [ ] Pay rent\n");
 
+		expect(props.aiFetch).toBe(obsidianFetch);
+		// aiFetch and aiProviderFactory can't be combined.
+		expect(props.aiProviderFactory).toBeUndefined();
 		expect(props.voiceRuntime?.browserSpeechSupported).toBe(false);
 	});
 

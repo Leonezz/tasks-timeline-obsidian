@@ -20,7 +20,7 @@ import { TimelineErrorBoundary, unmountReactRoot } from "./view";
 import type { StatsData } from "./mcpStats";
 import type { SessionSummary } from "./mcpServer";
 import { getActiveWindow } from "./obsidianDom";
-import { createObsidianVoiceRuntime } from "./obsidianHttp";
+import { createObsidianVoiceRuntime, obsidianFetch } from "./obsidianHttp";
 import { ObsidianSecretField } from "./secretField";
 import type { SecretSelectorMap } from "./secretStorage";
 
@@ -175,8 +175,10 @@ function SettingsPageWrapper({
 			customTabs={customTabs}
 			renderSecretField={renderSecretField}
 			// The same as the timeline's, so the AI page shows the Browser
-			// voice provider as unavailable.
+			// voice provider as unavailable and Test Connection goes through
+			// requestUrl.
 			voiceRuntime={voiceRuntime}
+			aiFetch={obsidianFetch}
 		/>
 	);
 }

@@ -14,7 +14,7 @@ import { isSameTaskLine, StaleTaskError } from "./taskLine";
 import { ObsidianSecretField } from "./secretField";
 import { createRenderTitle } from "./titleRenderer";
 import { App, debounce, Notice, Pos, TFile } from "obsidian";
-import { createObsidianVoiceRuntime } from "./obsidianHttp";
+import { createObsidianVoiceRuntime, obsidianFetch } from "./obsidianHttp";
 
 interface ObsidianAdaptorProps {
 	plugin: TasksTimelineObsidianPlugin;
@@ -288,6 +288,7 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			recurrenceFormat="text"
 			aiSystemPrompt={OBSIDIAN_AI_SYSTEM_PROMPT}
 			voiceRuntime={voiceRuntime}
+			aiFetch={obsidianFetch}
 		/>
 	);
 };
