@@ -378,6 +378,46 @@ describe("createObsidianCapabilityContext recurrence (MCP)", () => {
 	});
 });
 
+describe("createObsidianCapabilityContext stores recurrence as Obsidian Tasks text (MCP)", () => {
+	it("sets recurrenceFormat to text", () => {
+		const { ctx } = createMcpCapabilities("- [ ] Existing\n");
+
+		expect(ctx.recurrenceFormat).toBe("text");
+	});
+
+	it("writes an RRULE from update_task as text", async () => {
+		const { app, file, capabilities } = createMcpCapabilities(
+			"- [ ] Water plants 📅 2026-10-16\n",
+		);
+
+		const { result } = await capabilities.executeTool("update_task", {
+			id: await listedId(capabilities, "Water plants"),
+			recurrence: "FREQ=WEEKLY;BYDAY=MO",
+		});
+
+		expect(result).toMatchObject({ success: true });
+		await expect(app.vault.cachedRead(file)).resolves.toBe(
+			"- [ ] Water plants 📅 2026-10-16 🔁 every week on Monday\n",
+		);
+	});
+
+	it("rejects a rule with a start date before batch_update_tasks writes anything", async () => {
+		const content = "- [ ] First 📅 2026-10-16\n- [ ] Second 📅 2026-10-16\n";
+		const { app, file, capabilities } = createMcpCapabilities(content);
+		const processSpy = jest.spyOn(app.vault, "process");
+
+		const { result } = await capabilities.executeTool("batch_update_tasks", {
+			filter: { status: "todo" },
+			update: { recurrence: "DTSTART:20261016T000000Z\nRRULE:FREQ=WEEKLY" },
+		});
+
+		expect(JSON.stringify(result)).toMatch(/DTSTART/);
+		expect(result).not.toMatchObject({ success: true });
+		expect(processSpy).not.toHaveBeenCalled();
+		await expect(app.vault.cachedRead(file)).resolves.toBe(content);
+	});
+});
+
 describe("createObsidianCapabilityContext with sub-tasks (MCP)", () => {
 	it("refuses to delete a parent task", async () => {
 		const content = "- [ ] Parent\n\t- [ ] Child\n";

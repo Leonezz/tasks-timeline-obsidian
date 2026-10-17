@@ -211,6 +211,11 @@ export function createObsidianCapabilityContext(
 		// with a `confirm` dialog inside the component library.
 		confirmPolicy: "skip",
 
+		// Tasks are Obsidian Tasks lines: create_task, update_task and
+		// batch_update_tasks store rules as Tasks text and reject rules a line
+		// can't hold (DTSTART, BYSETPOS) before writing anything.
+		recurrenceFormat: "text",
+
 		dispose: stopWatching,
 	};
 }

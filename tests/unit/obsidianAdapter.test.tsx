@@ -9,6 +9,7 @@ interface CapturedAppProps {
 	tasks: Task[];
 	onTaskUpdated: (task: Task, previous: Task) => Promise<void>;
 	onTaskDeleted: (taskId: string, previous: Task) => Promise<void>;
+	recurrenceFormat?: string;
 }
 
 let mockAppProps: CapturedAppProps | undefined;
@@ -64,6 +65,12 @@ describe("ObsidianAdaptor task handlers", () => {
 
 	afterEach(() => {
 		noticeSpy.mockRestore();
+	});
+
+	it("has the editor and agent write recurrence as Obsidian Tasks text", async () => {
+		const { props } = await renderAdaptor("- [ ] Pay rent\n");
+
+		expect(props.recurrenceFormat).toBe("text");
 	});
 
 	it("rejects and shows the reason when the vault write fails", async () => {

@@ -303,6 +303,9 @@ export const ObsidianAdaptor = ({ plugin }: ObsidianAdaptorProps) => {
 			renderSecretField={(context) => (
 				<ObsidianSecretField context={context} plugin={plugin} />
 			)}
+			// The editor and the agent write rules as Obsidian Tasks text, also
+			// for tasks without Tasks fields (e.g. daily-note tasks).
+			recurrenceFormat="text"
 			aiSystemPrompt={OBSIDIAN_AI_SYSTEM_PROMPT}
 			voiceRuntime={voiceRuntime}
 		/>
