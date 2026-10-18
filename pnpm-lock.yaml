@@ -24,8 +24,11 @@ importers:
         specifier: ^1.27.1
         version: 1.27.1(zod@4.3.6)
       '@tasks-timeline/components':
-        specifier: ^0.9.0
-        version: 0.9.0(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.3.6)
+        specifier: ^0.10.0
+        version: 0.10.0(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.3.6)
+      lucide-react:
+        specifier: ^1.59.0
+        version: 1.59.0(@types/react@18.3.31)(react@18.3.1)
       luxon:
         specifier: ^3.7.2
         version: 3.7.2
@@ -1410,8 +1413,8 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@tasks-timeline/components@0.9.0':
-    resolution: {integrity: sha512-dXf/R3DcNme6BWDxs7Nqlkayi79GTlTISn7NOhOng7TaAK/6KH7RcLzPfI6FnVT+XjvvMSYoiNkjPt0h6dRM/g==}
+  '@tasks-timeline/components@0.10.0':
+    resolution: {integrity: sha512-MVt2mh8gr+5XRyu3+y8I77HS3us1zdN52YqH7nhF9IDjgWpQLeMTfOKn1wM6VlpNY0Uqn+UQbP7cwffwRqUB5A==}
     peerDependencies:
       react: ^18.3.1 || ^19.0.0
       react-dom: ^18.3.1 || ^19.0.0
@@ -3137,10 +3140,14 @@ packages:
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
 
-  lucide-react@0.330.0:
-    resolution: {integrity: sha512-CQwY+Fpbt2kxCoVhuN0RCZDCYlbYnqB870Bl/vIQf3ER/cnDDQ6moLmEkguRyruAUGd4j3Lc4mtnJosXnqHheA==}
+  lucide-react@1.59.0:
+    resolution: {integrity: sha512-5qgMyyCPU6OvnKpLS2t693+ZtiqA8oaSweWoUows0BLFKFf6V75m4+CptpmohZHpD5IuOVIBXHBBiv2vpLJmtw==}
     peerDependencies:
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0
+      '@types/react': '*'
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
 
   luxon@3.4.4:
     resolution: {integrity: sha512-zobTr7akeGHnv7eBOXcRgMeCP6+uyYsczwmeRCauvpvaAltgNyTbLH/+VaEAPUeWBT+1GuNmz4wC/6jtQzbbVA==}
@@ -5610,7 +5617,7 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@tasks-timeline/components@0.9.0(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.3.6)':
+  '@tasks-timeline/components@0.10.0(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.3.6)':
     dependencies:
       '@ai-sdk/anthropic': 3.0.84(zod@4.3.6)
       '@ai-sdk/google': 3.0.82(zod@4.3.6)
@@ -5626,7 +5633,7 @@ snapshots:
       clsx: 2.1.1
       date-fns: 4.1.0
       framer-motion: 12.23.26(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      lucide-react: 0.330.0(react@18.3.1)
+      lucide-react: 1.59.0(@types/react@18.3.31)(react@18.3.1)
       luxon: 3.4.4
       next-themes: 0.4.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
@@ -7872,9 +7879,11 @@ snapshots:
     dependencies:
       yallist: 3.1.1
 
-  lucide-react@0.330.0(react@18.3.1):
+  lucide-react@1.59.0(@types/react@18.3.31)(react@18.3.1):
     dependencies:
       react: 18.3.1
+    optionalDependencies:
+      '@types/react': 18.3.31
 
   luxon@3.4.4: {}
 

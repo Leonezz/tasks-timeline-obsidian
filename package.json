@@ -52,7 +52,8 @@
 	},
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.27.1",
-		"@tasks-timeline/components": "^0.9.0",
+		"@tasks-timeline/components": "^0.10.0",
+		"lucide-react": "^1.59.0",
 		"luxon": "^3.7.2",
 		"parsimmon": "^1.18.1",
 		"react": "18.3.1",
