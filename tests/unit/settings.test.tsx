@@ -1,5 +1,5 @@
 import { act, render } from "@testing-library/react";
-import type React from "react";
+import React from "react";
 import type { AppSettings, VoiceRuntime } from "@tasks-timeline/components";
 import type { App as ObsidianApp } from "obsidian";
 import type TasksTimelineObsidianPlugin from "../../src/main";
@@ -148,6 +148,33 @@ describe("TasksTimelineSettingTab", () => {
 		await updateSettings(withTheme("light"));
 
 		expect(noticeSpy).toHaveBeenCalledTimes(2);
+		act(() => tab.hide());
+	});
+
+	it("gives every custom tab an icon the library can render", () => {
+		const { tab } = createTab(jest.fn<Promise<void>, []>().mockResolvedValue());
+		act(() => tab.display());
+		const { Icon } = jest.requireActual<
+			typeof import("@tasks-timeline/components")
+		>("@tasks-timeline/components");
+		const tabs = mockPageProps!.customTabs as unknown as {
+			id: string;
+			icon?: unknown;
+		}[];
+		expect(tabs.length).toBeGreaterThan(0);
+
+		// SettingsPage renders a string icon through <Icon>, which throws for a
+		// name outside its registry, and a component icon as the component.
+		for (const { id, icon } of tabs) {
+			const element =
+				typeof icon === "string" ? (
+					<Icon name={icon as never} />
+				) : icon ? (
+					React.createElement(icon as React.ElementType)
+				) : null;
+			expect(() => render(<>{element}</>)).not.toThrow();
+			expect(id).toBeTruthy();
+		}
 		act(() => tab.hide());
 	});
 

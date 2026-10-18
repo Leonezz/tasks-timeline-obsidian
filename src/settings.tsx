@@ -6,6 +6,7 @@ import {
 import TasksTimelineObsidianPlugin from "./main";
 import { createRoot, Root as ReactRoot } from "react-dom/client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Plug } from "lucide-react";
 import componentStyles from "@tasks-timeline/components/index.css?inline";
 import pluginStyles from "./styles.css?inline";
 import {
@@ -721,7 +722,8 @@ export class TasksTimelineSettingTab extends PluginSettingTab {
 		const mcpTab: CustomSettingsTab = {
 			id: "mcp-server",
 			label: "MCP server",
-			icon: "Plug",
+			// "Plug" isn't in the library's icon registry, so pass the component.
+			icon: Plug,
 			content: (
 				<McpServerSettings
 					enabled={this.plugin.settings.mcpServer.enabled}
