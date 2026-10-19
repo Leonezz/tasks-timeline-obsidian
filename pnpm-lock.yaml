@@ -24,8 +24,8 @@ importers:
         specifier: ^1.27.1
         version: 1.27.1(zod@4.3.6)
       '@tasks-timeline/components':
-        specifier: ^0.10.0
-        version: 0.10.0(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.3.6)
+        specifier: ^0.10.1
+        version: 0.10.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.3.6)
       lucide-react:
         specifier: ^1.59.0
         version: 1.59.0(@types/react@18.3.31)(react@18.3.1)
@@ -1413,8 +1413,8 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@tasks-timeline/components@0.10.0':
-    resolution: {integrity: sha512-MVt2mh8gr+5XRyu3+y8I77HS3us1zdN52YqH7nhF9IDjgWpQLeMTfOKn1wM6VlpNY0Uqn+UQbP7cwffwRqUB5A==}
+  '@tasks-timeline/components@0.10.1':
+    resolution: {integrity: sha512-POrJytP4evWbdLtSXtE//8C+HL6BLFGN32mD4VVQzoAcMiwe9xVUbU2aFnt0bHii6Xsk3n3EFVWPysMhTqGtbg==}
     peerDependencies:
       react: ^18.3.1 || ^19.0.0
       react-dom: ^18.3.1 || ^19.0.0
@@ -5617,7 +5617,7 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@tasks-timeline/components@0.10.0(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.3.6)':
+  '@tasks-timeline/components@0.10.1(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(zod@4.3.6)':
     dependencies:
       '@ai-sdk/anthropic': 3.0.84(zod@4.3.6)
       '@ai-sdk/google': 3.0.82(zod@4.3.6)
